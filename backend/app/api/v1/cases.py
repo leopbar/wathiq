@@ -14,6 +14,7 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
+from app.agent import runner
 from app.core.config import settings
 from app.core.deps import (
     WRITE_ROLES,
@@ -33,7 +34,14 @@ from app.db.enums import (
     FindingStatus,
     Language,
 )
-from app.schemas.case import CaseCreate, CaseDetail, CaseStartResponse, CaseSummary, DocumentOut
+from app.schemas.case import (
+    AssuranceOut,
+    CaseCreate,
+    CaseDetail,
+    CaseStartResponse,
+    CaseSummary,
+    DocumentOut,
+)
 from app.schemas.common import Page
 from app.services import mappers, pipeline, progress
 from app.services.events import record_event, record_user_event
@@ -331,6 +339,47 @@ async def start_case(
     # the transaction that set the case to `processing`.
     pipeline.start(case.id)
     return CaseStartResponse(thread_id=case.thread_id, status=case.status)
+
+
+@router.get("/{case_id}/assurance", response_model=AssuranceOut)
+async def case_assurance(case_id: UUID, db: DbSession, _: CurrentUser) -> AssuranceOut:
+    """The evidence behind this case: guardrails, workers, critic, investigation, tools.
+
+    Read from the LangGraph checkpoint rather than from a second set of tables. The checkpoint
+    is what the graph resumes from, so the panel shows exactly what the run knew.
+    """
+    case = await _load_case(db, case_id)
+    state = await runner.get_state(case.thread_id)
+    if state is None:
+        return AssuranceOut(
+            available=False,
+            thread_id=case.thread_id,
+            note=(
+                "This case has no agent checkpoint. Seeded demo cases are written straight to "
+                "the database and never run through the graph — upload a document on the New "
+                "case screen to see a real run."
+            ),
+        )
+
+    return AssuranceOut(
+        available=True,
+        thread_id=case.thread_id,
+        guardrails=list(state.get("guardrails") or []),
+        worker_results=list(state.get("worker_results") or []),
+        critic_notes=list(state.get("critic_notes") or []),
+        investigation=list(state.get("investigation") or []),
+        tool_calls=list(state.get("tool_calls") or []),
+        plan=[
+            # The full field schema is in the plan for the workers' benefit; the UI does not
+            # need it and it would be the largest thing on the page.
+            {key: value for key, value in item.items() if key != "field_schema"}
+            for item in (state.get("plan") or [])
+        ],
+        rule_packs=dict(state.get("rule_packs") or {}),
+        prompt_versions=dict(state.get("prompt_versions") or {}),
+        calibration=dict(state.get("calibration") or {}),
+        review_reasons=list(state.get("review_reasons") or []),
+    )
 
 
 @router.get("/{case_id}/events")

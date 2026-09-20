@@ -47,6 +47,31 @@ export default function QualityLab() {
     queryFn: () => apiFetch<QualityCalibration>("/quality/calibration"),
   });
 
+  // Refitting is cheap and its training data grows every time a reviewer decides something,
+  // so it is an action on this page rather than a scheduled job nobody can see.
+  const refit = useMutation({
+    mutationFn: () =>
+      apiFetch<QualityCalibration>("/quality/calibration/refit", { method: "POST" }),
+    onSuccess: (result) => {
+      if (result.curve.fitted) {
+        toast.success("Confidence curve refitted", {
+          description: `Fitted on ${result.curve.sample_count} reviewed field(s). Brier ${result.curve.brier_before.toFixed(3)} → ${result.curve.brier_after.toFixed(3)}.`,
+        });
+      } else {
+        toast.info("Not enough decided cases yet", {
+          description:
+            result.curve.sample_count > 0
+              ? `Only ${result.curve.sample_count} reviewed field(s), and none of them disagreed. Confidence stays raw until there is something to learn from.`
+              : "No reviewed fields yet. Confidence stays raw until reviewers have decided some cases.",
+        });
+      }
+      void queryClient.invalidateQueries({ queryKey: ["quality"] });
+      void queryClient.invalidateQueries({ queryKey: qk.assurance });
+    },
+    onError: (error) =>
+      toast.error("Refit failed", { description: describeError(error).message }),
+  });
+
   const startRun = useMutation({
     mutationFn: (target: string) =>
       apiFetch<QualityRun>("/quality/runs", {
@@ -228,7 +253,7 @@ export default function QualityLab() {
             description="Predicted confidence versus observed accuracy."
             action={
               calibration.data ? (
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Badge tone="outline">ECE {calibration.data.ece.toFixed(3)}</Badge>
                   <Badge tone="outline">Brier {calibration.data.brier.toFixed(3)}</Badge>
                 </div>
@@ -247,11 +272,54 @@ export default function QualityLab() {
           ) : (
             <div className="p-4">
               <CalibrationChart data={calibration.data} />
-              <p className="mt-3 text-caption leading-4 text-ink-2">
-                Points on the dashed line mean a stated 80% is right 80% of the time. Points below
-                the line mean the system is overconfident — that is what the calibration step in the
-                pipeline corrects before any confidence reaches a reviewer.
-              </p>
+              <div className="mt-3 space-y-2 text-caption leading-4 text-ink-2">
+                <p>
+                  Points on the dashed line mean a stated 80% is right 80% of the time. Points
+                  below the line mean the system is overconfident — that is what the calibration
+                  step corrects before any confidence reaches a reviewer.
+                </p>
+                <div className="rounded-lg border border-border bg-surface-2/60 p-2.5">
+                  <span className="font-medium text-ink">
+                    {calibration.data.curve.fitted ? "Curve fitted" : "Curve not fitted yet"}
+                  </span>
+                  {calibration.data.curve.fitted ? (
+                    <>
+                      {" "}
+                      on {calibration.data.curve.sample_count} reviewed field(s). Brier{" "}
+                      {calibration.data.curve.brier_before.toFixed(3)} →{" "}
+                      {calibration.data.curve.brier_after.toFixed(3)}. {calibration.data.method}.
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      — the confidence shown across the product is the extractor&rsquo;s raw
+                      score, labelled as raw rather than presented as calibrated.{" "}
+                      {calibration.data.curve.sample_count > 0
+                        ? `${calibration.data.curve.sample_count} reviewed field(s) so far.`
+                        : "No reviewer decisions to learn from yet."}
+                    </>
+                  )}
+                  {mayRun ? (
+                    <span className="mt-2 flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => refit.mutate()}
+                        disabled={refit.isPending}
+                      >
+                        {refit.isPending ? "Refitting…" : "Refit curve"}
+                      </Button>
+                      <span className="text-ink-2">
+                        Fits again on every decision reviewers have made since.
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
+                <p>
+                  <span className="font-medium text-ink">Where the ground truth comes from:</span>{" "}
+                  {calibration.data.ground_truth}
+                </p>
+              </div>
             </div>
           )}
         </Card>

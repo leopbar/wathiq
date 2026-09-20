@@ -1,0 +1,33 @@
+id: moa
+version: 1.1.0
+title: Memorandum of association
+applies_to: [moa]
+description: >-
+  Checks the incorporation document. Two of these rules are *named checks* rather than
+  expressions, because they compare a list inside one document against the other documents in
+  the case — something a two-value expression cannot say.
+rules:
+  - id: MOA_SHAREHOLDERS_HAVE_ID
+    check: shareholders_have_id
+    severity: critical
+    message: A shareholder has no identity document in this case
+    policy: KYC-POL-006 §4.1
+    explain: >-
+      Beneficial ownership is the point of a KYC refresh. If the memorandum names someone the
+      file has no passport or Emirates ID for, the refresh is incomplete by definition.
+
+  - id: MOA_SHARES_TOTAL_100
+    check: shares_total_100
+    severity: warning
+    message: Shareholding percentages do not add up to 100
+    policy: KYC-POL-006 §4.2
+    explain: >-
+      Percentages that do not total 100 mean either a missing shareholder or a misread number.
+      Both matter for ownership, so a person decides which it was.
+
+  - id: MOA_COMPANY_NAME_PRESENT
+    expr: "company_name_en is present"
+    severity: critical
+    message: Company name is missing from the memorandum
+    policy: KYC-POL-006 §1.1
+    explain: The company name is what the trade licence is cross-checked against.

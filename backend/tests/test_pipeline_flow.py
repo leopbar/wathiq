@@ -82,7 +82,11 @@ async def test_a_clean_document_goes_straight_through(client: AsyncClient, auth)
     assert detail["status"] == "completed"
     assert detail["straight_through"] is True
     assert detail["confidence"] > 0.8
-    assert detail["findings"] == []
+    # Nothing is wrong with the document, so nothing is raised against it. `info` findings are
+    # allowed through: the investigator records that it could not confirm an invented licence
+    # number against the simulated registry, which is true and is not a defect in the document.
+    raised = [f for f in detail["findings"] if f["severity"] != "info"]
+    assert raised == [], raised
 
     values = {f["name"]: f["value"] for f in detail["fields"]}
     assert values["license_number"] == "CN-9001234"
@@ -224,8 +228,12 @@ async def test_the_timeline_records_every_pipeline_step(client: AsyncClient, aut
         "documents.uploaded",
         "case.started",
         "agent.ocr",
-        "agent.classify.done",
-        "agent.extract.done",
+        "agent.guardrails",
+        "agent.classify",
+        "agent.supervisor",
+        "agent.extract",
+        "agent.critic",
+        "agent.investigate",
         "agent.validate",
         "agent.finalize",
         "pipeline.completed",

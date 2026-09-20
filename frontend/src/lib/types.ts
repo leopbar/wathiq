@@ -123,6 +123,17 @@ export interface ExtractedField {
   page: number | null;
   bbox: [number, number, number, number] | null; // normalised x,y,w,h in 0..1
   source_text: string | null; // grounding snippet
+  /** What the confidence was built from. Null for cases seeded before M3. */
+  signals: ConfidenceSignal[] | null;
+}
+
+/** One reason a field scored what it did. The UI shows these instead of a bare percentage. */
+export interface ConfidenceSignal {
+  key: "ocr" | "grounded" | "label" | "shape" | "critic";
+  label: string;
+  value: number; // 0..1, how strong this signal was
+  weight: number; // 0..1, how much it counts
+  detail: string; // plain English, e.g. "exact text found in the document"
 }
 
 export interface Finding {
@@ -281,10 +292,25 @@ export interface QualityRunDetail {
   cases: QualityRunCase[];
 }
 
+export interface CalibrationCurve {
+  a: number;
+  b: number;
+  fitted: boolean; // false = the numbers shown are raw, and the UI must say so
+  sample_count: number;
+  brier_before: number;
+  brier_after: number;
+  improvement: number;
+  model_version: string;
+}
+
 export interface QualityCalibration {
   points: { predicted: number; observed: number; n: number }[];
   ece: number;
   brier: number;
+  model_version: string;
+  curve: CalibrationCurve;
+  method: string;
+  ground_truth: string;
 }
 
 /* ------------------------------ prompt studio ----------------------------- */
@@ -415,4 +441,148 @@ export interface CaseProgressEvent {
 export interface StartCaseResponse {
   thread_id: string;
   status: CaseStatus;
+}
+
+/* ------------------------------- assurance -------------------------------- */
+
+/** The evidence behind one case, read from the agent's own checkpoint. */
+export interface CaseAssurance {
+  available: boolean; // false for a seeded case that never ran through the graph
+  note: string;
+  thread_id: string;
+  guardrails: GuardrailReport[];
+  worker_results: WorkerResult[];
+  critic_notes: CriticNote[];
+  investigation: InvestigationStep[];
+  tool_calls: ToolCall[];
+  plan: PlanItem[];
+  rule_packs: Record<string, string>; // doc type -> "trade_license@1.2.0"
+  prompt_versions: Record<string, string>;
+  calibration: CalibrationCurve;
+  review_reasons: { code: string; label: string }[];
+}
+
+export interface GuardrailReport {
+  document_id: string;
+  filename: string;
+  blocked: boolean;
+  sanitised: boolean;
+  pii_counts: Record<string, number>;
+  injection: {
+    attacked: boolean;
+    risk: number;
+    engine: string;
+    signals: { kind: string; pattern: string; excerpt: string }[];
+  };
+  safety: {
+    flagged: boolean;
+    severities: Record<string, number>;
+    matches: string[];
+    engine: string;
+  };
+}
+
+export interface WorkerResult {
+  document_id: string;
+  filename: string;
+  doc_type: string;
+  field_count: number;
+  attempts: number;
+  validated: boolean;
+  duration_ms: number;
+  model_version: string;
+  prompt_version: string;
+  repairs: {
+    field: string;
+    pass: string;
+    strategy: string;
+    error: string;
+    explanation: string;
+    before: string;
+    after: string;
+  }[];
+  examples: { id: string; doc_type: string; note: string; similarity: number }[];
+}
+
+export interface CriticNote {
+  field: string;
+  agreed: boolean;
+  reason: string;
+  via: string; // "mcp:document_store" or "local"
+  suggested_value: string | null;
+}
+
+export interface InvestigationStep {
+  index: number;
+  thought: string;
+  action: string;
+  action_input: Record<string, unknown>;
+  observation: string;
+  ok: boolean;
+  duration_ms: number;
+}
+
+export interface ToolCall {
+  server: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  ok: boolean;
+  duration_ms: number;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface PlanItem {
+  document_id: string;
+  filename: string;
+  doc_type: string;
+  classification_confidence: number;
+  evidence: string[];
+  field_count: number;
+  worker: string;
+  dispatched: boolean;
+  skipped_because: string;
+  prompt_version: string;
+}
+
+/** How the agent assures its answers, read from the code that runs. */
+export interface AssuranceInfo {
+  guardrails: { key: string; name: string; purpose: string; implementation: string; azure: string }[];
+  confidence_signals: { key: string; label: string; weight: number }[];
+  tool_servers: ToolServer[];
+  rule_packs: RulePack[];
+  registered_checks: string[];
+  graph_steps: { key: string; label: string }[];
+  policy_documents: { name: string; sections: number }[];
+  embedder: string;
+  calibration: CalibrationCurve;
+}
+
+export interface ToolServer {
+  key: string;
+  name: string;
+  url_configured: boolean;
+  can_write: boolean;
+  tools: string[];
+  used_by_nodes: string[];
+}
+
+export interface RulePack {
+  id: string;
+  version: string;
+  title: string;
+  description: string;
+  applies_to: string[];
+  source: string;
+  rules: RuleOut[];
+}
+
+export interface RuleOut {
+  id: string;
+  severity: Severity;
+  message: string;
+  policy: string | null;
+  explain: string;
+  expr: string | null;
+  check: string | null;
 }

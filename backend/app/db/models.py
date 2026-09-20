@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -195,6 +196,9 @@ class ExtractedField(Base):
     # Normalised [x, y, w, h] in 0..1 so the UI can overlay it on any render size.
     bbox: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
     source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The signals the confidence was built from: OCR quality, grounding, label match, shape,
+    # critic agreement. Stored so the case screen can show WHY a number is what it is.
+    signals: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = created_at_col()
 
@@ -378,3 +382,49 @@ class CalibrationPoint(Base):
         CheckConstraint("predicted >= 0 AND predicted <= 1", name="predicted_range"),
         CheckConstraint("observed >= 0 AND observed <= 1", name="observed_range"),
     )
+
+
+class CalibrationCurve(Base):
+    """The fitted confidence curve: raw score in, calibrated probability out.
+
+    One row per fit, with only the newest marked active. Keeping the old rows means a case
+    closed last month can be read with the curve that was in force when it closed.
+    """
+
+    __tablename__ = "calibration_curves"
+
+    id: Mapped[UUID] = uuid_pk()
+    # Platt scaling: calibrated = sigmoid(a * raw + b). Two parameters, nothing hidden.
+    a: Mapped[float] = mapped_column(Float, default=1.0)
+    b: Mapped[float] = mapped_column(Float, default=0.0)
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    brier_before: Mapped[float] = mapped_column(Float, default=0.0)
+    brier_after: Mapped[float] = mapped_column(Float, default=0.0)
+    model_version: Mapped[str] = mapped_column(String(80), default="")
+    method: Mapped[str] = mapped_column(String(40), default="platt")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    fitted_at: Mapped[datetime] = created_at_col()
+
+
+class PolicyChunk(Base):
+    """One section of one synthetic policy document, with its embedding.
+
+    This is the RAG index. It lives in the same PostgreSQL database as everything else, using
+    the pgvector extension, so there is no separate vector service to run or explain.
+    """
+
+    __tablename__ = "policy_chunks"
+
+    id: Mapped[UUID] = uuid_pk()
+    policy_id: Mapped[str] = mapped_column(String(40), index=True)
+    policy_title: Mapped[str] = mapped_column(String(200), default="")
+    section: Mapped[str] = mapped_column(String(20), default="")
+    # "KYC-POL-004 §3.2" — exactly the string a rule pack cites, so most look-ups are direct.
+    citation: Mapped[str] = mapped_column(String(80), index=True)
+    heading: Mapped[str] = mapped_column(String(200), default="")
+    text: Mapped[str] = mapped_column(Text, default="")
+    embedding: Mapped[list[float]] = mapped_column(Vector(256))
+    embedder_version: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = created_at_col()
+
+    __table_args__ = (UniqueConstraint("citation", name="uq_policy_chunks_citation"),)

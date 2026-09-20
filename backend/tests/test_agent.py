@@ -191,7 +191,10 @@ def test_a_rule_we_cannot_evaluate_is_reported_not_silently_passed() -> None:
         {"trade_license": {}},
         "trade_license",
     )
-    assert "skipped" in outcomes[0].detail
+    # `passed` is True only because there is nothing to fail; `evaluated` is the flag that
+    # says the rule never ran, and callers must read that one.
+    assert outcomes[0].evaluated is False
+    assert "not evaluated" in outcomes[0].detail
 
 
 # ---------------------------------------------------------------------------- graph
@@ -201,8 +204,11 @@ def test_graph_has_the_nodes_and_the_branch() -> None:
     graph = build_graph()
     assert set(graph.nodes) == {
         "ocr",
-        "classify",
-        "extract",
+        "guardrails",
+        "supervisor",
+        "extract_worker",
+        "critic",
+        "investigator",
         "validate",
         "review_gate",
         "finalize",

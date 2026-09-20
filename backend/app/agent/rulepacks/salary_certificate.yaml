@@ -1,0 +1,51 @@
+# Use case 2, added by configuration only.
+#
+# This file is the whole of the second use case's validation logic. No engine code was written
+# for it: the same expressions, the same loader, the same graph. That is the point of keeping
+# rules as data.
+id: salary_certificate
+version: 1.1.0
+title: Salary certificate
+applies_to: [salary_certificate]
+description: >-
+  Checks a salary certificate used for a lending decision: the numbers must be consistent, the
+  document must be recent, and the IBAN must be a valid UAE one.
+rules:
+  - id: SC_TOTAL_GE_BASIC
+    expr: "total_salary >= basic_salary"
+    severity: critical
+    message: Total salary is lower than the basic salary
+    policy: LEN-POL-002 §1.1
+    explain: >-
+      Total salary is basic plus allowances, so it can never be smaller. When it is, one of
+      the two numbers was read from the wrong line.
+
+  - id: SC_RECENT
+    expr: "issue_date > today - 90 days"
+    severity: warning
+    message: Salary certificate is older than 90 days
+    policy: LEN-POL-002 §1.4
+    explain: Lending decisions need current income evidence; three months is the policy limit.
+
+  - id: SC_NOT_FUTURE_DATED
+    expr: "issue_date < today + 1 days"
+    severity: critical
+    message: Salary certificate is dated in the future
+    policy: LEN-POL-002 §1.5
+    explain: A future-dated certificate is either a misread date or a forged document.
+
+  - id: SC_IBAN_FORMAT
+    expr: "iban matches AE## #### #### #### #### ###"
+    severity: warning
+    message: IBAN is not a valid UAE format
+    policy: LEN-POL-002 §2.2
+    explain: >-
+      A UAE IBAN is AE plus 21 digits. Spaces in the written form are optional, so the shape
+      is checked, not the spacing.
+
+  - id: SC_EMPLOYER_PRESENT
+    expr: "employer_name is present"
+    severity: critical
+    message: Employer name is missing
+    policy: LEN-POL-002 §1.2
+    explain: Without an employer the certificate cannot be verified against anything.

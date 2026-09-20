@@ -4,6 +4,18 @@ Every node takes the state, does one job, and returns only the keys it changed. 
 merges those keys into the state and checkpoints the result, so the case can stop and resume
 between any two nodes.
 
+The order, and why each step is where it is:
+
+    ocr          read the bytes; nothing else can happen first
+    guardrails   inspect the text BEFORE anything reads it as instructions
+    supervisor   classify each document and fan out one worker per document (Send API)
+    extract      the workers, in parallel, each self-correcting on its own validation errors
+    critic       challenge the values a second way (actor-critic)
+    investigator answer what the documents cannot answer, with MCP tools (ReAct)
+    validate     versioned rules, policy citations, calibrated confidence
+    review_gate  interrupt() when a person must decide
+    finalize     close the case out
+
 The review gate is the one node with a hard rule: **it must not change anything before it
 calls `interrupt()`**, because when a reviewer answers, LangGraph re-runs the node from the
 top. Anything written before the interrupt would be written twice.
@@ -16,21 +28,29 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from langgraph.types import interrupt
+from langgraph.types import Send, interrupt
 from sqlalchemy import select
 
+from app.agent import calibration, rulepacks
+from app.agent import confidence as confidence_signals
+from app.agent import critic as critic_module
+from app.agent import investigator as investigator_module
 from app.agent import rules as rule_engine
 from app.agent.classifier import classify
 from app.agent.extractor import get_extractor
 from app.agent.ocr import get_ocr
-from app.agent.state import CaseState, DocumentState, FieldState, FindingState
+from app.agent.state import CaseState, DocumentState, FieldState, FindingState, WorkerInput
+from app.agent.tools import ToolBroker
+from app.agent.worker import extract_document
 from app.db import models
 from app.db.enums import ActorType, DocTypeKey, Severity
 from app.db.session import SessionLocal
+from app.guardrails import screen
+from app.rag import index as policy_index
 from app.services.events import record_event
 from app.services.storage import get_storage
 
-# A critical field below this confidence pulls the case into human review.
+# A critical field below this calibrated confidence pulls the case into human review.
 CRITICAL_FIELD_THRESHOLD = 0.85
 # Any field below this is flagged for the reviewer's attention.
 FIELD_REVIEW_THRESHOLD = 0.70
@@ -44,6 +64,7 @@ async def _emit(
     detail: dict[str, Any] | None = None,
     duration_ms: int | None = None,
     model_version: str | None = None,
+    prompt_version: str | None = None,
 ) -> None:
     """Write one line to the append-only event log.
 
@@ -61,6 +82,7 @@ async def _emit(
             detail=detail,
             duration_ms=duration_ms,
             model_version=model_version,
+            prompt_version=prompt_version,
         )
         await db.commit()
 
@@ -108,21 +130,170 @@ async def ocr_node(state: CaseState) -> dict[str, Any]:
     return {"documents": updated}
 
 
-# ---------------------------------------------------------------------- classify
+# -------------------------------------------------------------------- guardrails
 
 
-async def classify_node(state: CaseState) -> dict[str, Any]:
-    """Decide what each document is, and record the evidence for the decision."""
+async def guardrails_node(state: CaseState) -> dict[str, Any]:
+    """Inspect every document before anything treats its text as meaningful.
+
+    Three checks run here — prompt shield, content safety, PII tokenisation — and the cleaned
+    text is put on the document as `safe_text`. From this point on, the pipeline works from
+    `safe_text`; the original stays on the record for the reviewer to look at.
+
+    Nothing is rejected. A document that trips a guardrail goes to a person, because the
+    common cause is a bad scan and the rare cause is an attack, and both need a human.
+    """
     started = time.perf_counter()
     updated: list[DocumentState] = []
-    summary: dict[str, str] = {}
+    reports: list[dict[str, Any]] = []
+    reasons: list[dict[str, str]] = []
+    findings: list[FindingState] = []
 
     for document in state["documents"]:
-        doc_type, confidence, evidence = classify(document["ocr_text"], document["filename"])
+        report, _vault = screen(
+            document["document_id"], document["filename"], document.get("ocr_text", "")
+        )
+        # `clean_text`, not `log_text`: the pipeline must read the real values. The vault
+        # (token → real value) and the tokenised copy stay in this function and are never
+        # checkpointed — tokenisation protects logs, not the pipeline.
+        updated.append({**document, "safe_text": report.clean_text})
+        reports.append(report.as_dict())
+
+        if report.injection.get("attacked"):
+            kinds = sorted({s["kind"] for s in report.injection.get("signals", [])})
+            findings.append(
+                {
+                    "code": "SUSPECTED_INJECTION",
+                    "severity": Severity.critical.value,
+                    "title": f"Hidden instructions found in {document['filename']}",
+                    "description": (
+                        "The document contains text shaped like an instruction "
+                        f"({', '.join(kinds)}). It was never acted on: document text is data, "
+                        "never a command. The case is referred to a person."
+                    ),
+                    "policy_citation": "AI-POL-001 §2.1",
+                    "source": "guardrails",
+                }
+            )
+            reasons.append(
+                {
+                    "code": "SUSPECTED_INJECTION",
+                    "label": f"{document['filename']} may contain hidden instructions",
+                }
+            )
+
+        if report.safety.get("flagged"):
+            findings.append(
+                {
+                    "code": "UNSAFE_CONTENT",
+                    "severity": Severity.critical.value,
+                    "title": f"Content safety flagged {document['filename']}",
+                    "description": (
+                        "The upload was flagged by the content-safety check "
+                        f"({', '.join(report.safety.get('matches', []))}). A person must look "
+                        "at it before the case continues."
+                    ),
+                    "policy_citation": "AI-POL-001 §3.1",
+                    "source": "guardrails",
+                }
+            )
+            reasons.append(
+                {"code": "UNSAFE_CONTENT", "label": f"{document['filename']} flagged as unsafe"}
+            )
+
+        await _emit(
+            state["case_id"],
+            "agent.guardrails.document",
+            (
+                f"{document['filename']}: {len(report.pii_counts)} PII type(s) tokenised for "
+                "logs; "
+                + (
+                    "injection patterns found"
+                    if report.injection.get("attacked")
+                    else "no injection patterns"
+                )
+            ),
+            detail=report.as_dict(),
+        )
+
+    blocked = sum(1 for report in reports if report.get("blocked"))
+    await _emit(
+        state["case_id"],
+        "agent.guardrails",
+        (
+            f"Guardrails cleared {len(reports) - blocked} of {len(reports)} document(s)"
+            if reports
+            else "No documents to screen"
+        ),
+        detail={
+            "documents": len(reports),
+            "blocked": blocked,
+            "checks": ["prompt shield", "content safety", "PII tokenisation"],
+        },
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    return {
+        "documents": updated,
+        "guardrails": reports,
+        "findings": await cite_findings(findings),
+        "review_reasons": reasons,
+    }
+
+
+# -------------------------------------------------------------------- supervisor
+
+
+async def supervisor_node(state: CaseState) -> dict[str, Any]:
+    """Classify each document and decide who reads what.
+
+    This is the supervisor half of supervisor-worker. It does no extraction itself: it works
+    out what each document is, picks the schema and the prompt version for it, and writes a
+    plan. `fan_out` then turns that plan into one `Send` per document, and the workers run in
+    parallel.
+    """
+    started = time.perf_counter()
+    doc_types = await _load_doc_types()
+    updated: list[DocumentState] = []
+    plan: list[dict[str, Any]] = []
+    reasons: list[dict[str, str]] = []
+    prompt_versions: dict[str, str] = {}
+
+    for index, document in enumerate(state["documents"]):
+        text = document.get("safe_text") or document.get("ocr_text", "")
+        doc_type, confidence, evidence = classify(text, document["filename"])
         updated.append(
             {**document, "doc_type": doc_type.value, "classification_confidence": confidence}
         )
-        summary[document["filename"]] = doc_type.value
+
+        definition = doc_types.get(doc_type.value)
+        schema = list(definition.field_schema or []) if definition else []
+        prompt_key = definition.prompt_key if definition else ""
+        if definition:
+            prompt_versions[doc_type.value] = f"{prompt_key}@{definition.version}"
+
+        plan.append(
+            {
+                "document_id": document["document_id"],
+                "filename": document["filename"],
+                "doc_type": doc_type.value,
+                "classification_confidence": confidence,
+                "evidence": evidence,
+                "field_count": len(schema),
+                "field_schema": schema,
+                "worker": "extract_worker",
+                # A document with no schema has no worker to send it to, and saying so here is
+                # what stops the fan-out from starting a worker with nothing to do.
+                "dispatched": bool(schema) and bool(text),
+                "skipped_because": (
+                    "" if schema and text else
+                    "no text could be read" if not text else
+                    "no schema is configured for this document type"
+                ),
+                "order_offset": index * 100,
+                "prompt_version": prompt_versions.get(doc_type.value, ""),
+            }
+        )
+
         await _emit(
             state["case_id"],
             "agent.classify",
@@ -131,7 +302,6 @@ async def classify_node(state: CaseState) -> dict[str, Any]:
         )
 
     unknown = [d["filename"] for d in updated if d["doc_type"] == DocTypeKey.unknown.value]
-    reasons: list[dict[str, str]] = []
     if unknown:
         reasons.append(
             {
@@ -140,105 +310,282 @@ async def classify_node(state: CaseState) -> dict[str, Any]:
             }
         )
 
+    dispatched = sum(1 for item in plan if item["dispatched"])
     await _emit(
         state["case_id"],
-        "agent.classify.done",
-        f"Classified {len(updated)} document(s)",
-        detail={"types": summary},
+        "agent.supervisor",
+        f"Supervisor dispatched {dispatched} worker(s) in parallel",
+        detail={"plan": plan, "prompt_versions": prompt_versions},
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
-    return {"documents": updated, "review_reasons": reasons}
+    return {
+        "documents": updated,
+        "plan": plan,
+        "review_reasons": reasons,
+        "prompt_versions": prompt_versions,
+    }
 
 
-# ----------------------------------------------------------------------- extract
+def fan_out(state: CaseState) -> list[Send] | str:
+    """The Send API: one worker per document, all in the same superstep.
 
+    Returning a list of `Send` objects is what makes the workers run in parallel rather than
+    one after another. Each `Send` carries only that worker's slice of the problem.
 
-async def extract_node(state: CaseState) -> dict[str, Any]:
-    """Pull the schema's fields out of each document.
-
-    The schema comes from the `document_types` table, so a new document type is configuration.
-    M3 replaces this single pass with parallel workers and a critic.
+    A case whose documents were all skipped has nothing to fan out to, and goes straight to
+    the critic, which will have nothing to challenge and will say so.
     """
+    sends: list[Send] = []
+    documents = {document["document_id"]: document for document in state["documents"]}
+
+    for item in state.get("plan", []):
+        if not item.get("dispatched"):
+            continue
+        document = documents.get(item["document_id"])
+        if document is None:
+            continue
+        payload: WorkerInput = {
+            "case_id": state["case_id"],
+            "document": document,
+            "field_schema": item.get("field_schema") or [],
+            "order_offset": int(item.get("order_offset", 0)),
+            "prompt_version": str(item.get("prompt_version", "")),
+        }
+        sends.append(Send("extract_worker", payload))
+
+    return sends or "critic"
+
+
+# ------------------------------------------------------------------ extract work
+
+
+async def extract_worker_node(payload: WorkerInput) -> dict[str, Any]:
+    """One worker, one document. Runs in parallel with the other workers.
+
+    It gets its own slice of the problem — a document and a schema — and knows nothing about
+    the rest of the case, which is what makes running several of them at once safe.
+    """
+    document = payload["document"]
+    case_id = payload["case_id"]
+    fields, report = extract_document(
+        document, payload["field_schema"], order_offset=payload["order_offset"]
+    )
+    report["prompt_version"] = payload.get("prompt_version", "")
+
+    repairs = report["repairs"]
+    await _emit(
+        case_id,
+        "agent.extract",
+        (
+            f"{document['filename']}: {len(fields)} field(s) read"
+            + (f", {len(repairs)} self-correction(s)" if repairs else "")
+        ),
+        detail={
+            "doc_type": document["doc_type"],
+            "attempts": report["attempts"],
+            "repairs": repairs,
+            "examples_selected": report["examples"],
+            "validated": report["validated"],
+        },
+        duration_ms=report["duration_ms"],
+        model_version=report["model_version"],
+        prompt_version=report["prompt_version"] or None,
+    )
+    return {"fields": fields, "worker_results": [report]}
+
+
+# ------------------------------------------------------------------------ critic
+
+
+async def critic_node(state: CaseState) -> dict[str, Any]:
+    """Challenge the extracted values a second, different way (actor-critic)."""
     started = time.perf_counter()
     doc_types = await _load_doc_types()
-    extractor = get_extractor()
-    fields: list[FieldState] = []
-    order = 0
+    documents = {document["document_id"]: document for document in state["documents"]}
+    broker = ToolBroker.for_node("critic")
 
-    for document in state["documents"]:
-        definition = doc_types.get(document["doc_type"])
-        if definition is None or not document["ocr_text"]:
+    notes: list[dict[str, Any]] = []
+    revised: list[FieldState] = []
+    reasons: list[dict[str, str]] = []
+    disagreements = 0
+
+    for field in state.get("fields", []):
+        document = documents.get(str(field.get("document_id") or ""))
+        if document is None:
             continue
-        schema: list[dict[str, Any]] = list(definition.field_schema or [])
-        lines = document["ocr_text"].split("\n")
-        found = extractor.extract(lines, schema, document["doc_type"])
+        definition = doc_types.get(document["doc_type"])
+        schema = list(definition.field_schema or []) if definition else []
+        expected = {
+            str(spec["name"]): str(spec.get("type", "string")) for spec in schema
+        }.get(field["name"], "string")
 
-        for spec in schema:
-            name = str(spec["name"])
-            result = found.get(name)
-            fields.append(
-                {
-                    "name": name,
-                    "label_en": str(spec.get("label_en", name)),
-                    "label_ar": str(spec.get("label_ar", "")),
-                    "value": result.value if result else None,
-                    # A field the schema wants but the document does not contain is a real
-                    # signal, so it gets confidence 0 rather than being dropped.
-                    "confidence": result.confidence if result else 0.0,
-                    "is_critical": bool(spec.get("is_critical", False)),
-                    "document_id": document["document_id"],
-                    "page": result.page if result else None,
-                    "bbox": None,
-                    "source_text": result.source_text if result else None,
-                    "order_index": order,
-                }
-            )
-            order += 1
-
-        await _emit(
-            state["case_id"],
-            "agent.extract",
-            f"{len(found)} field(s) read from {document['filename']}",
-            detail={"doc_type": document["doc_type"], "found": sorted(found)},
-            model_version=extractor.model_version,
+        verdict = await critic_module.review_field(
+            field,
+            document=document,
+            expected_type=expected,
+            label_keys=critic_module.label_index(schema),
+            broker=broker,
         )
+        notes.append(verdict.as_dict())
+
+        # The critic's verdict is the fifth confidence signal, so the field is re-scored.
+        signals = confidence_signals.from_dicts(list(field.get("signals") or []))
+        signals = [signal for signal in signals if signal.key != "critic"]
+        critic_signal = confidence_signals.critic_signal(verdict.agreed, verdict.reason)
+        if critic_signal is not None:
+            signals.append(critic_signal)
+        breakdown = confidence_signals.combine(
+            signals, self_corrections=max(0, int(field.get("attempts", 1)) - 1)
+        )
+
+        revised.append(
+            {
+                **field,
+                "confidence": breakdown.raw,
+                "calibrated_confidence": breakdown.raw,
+                "signals": breakdown.as_dict()["signals"],
+                "critic": verdict.as_dict(),
+            }
+        )
+
+        if not verdict.agreed:
+            disagreements += 1
+            if field.get("is_critical"):
+                reasons.append(
+                    {
+                        "code": "CRITIC_DISAGREEMENT",
+                        "label": f"{field['label_en']}: {verdict.reason}",
+                    }
+                )
 
     await _emit(
         state["case_id"],
-        "agent.extract.done",
-        f"{len(fields)} field(s) extracted across the case",
-        detail={"extractor": extractor.label},
+        "agent.critic",
+        (
+            f"Critic checked {len(notes)} field(s); {disagreements} disagreement(s)"
+            if notes
+            else "Critic had no fields to check"
+        ),
+        detail={
+            "checked": len(notes),
+            "disagreements": disagreements,
+            "via": sorted({note["via"] for note in notes}) if notes else [],
+        },
         duration_ms=int((time.perf_counter() - started) * 1000),
-        model_version=extractor.model_version,
     )
-    return {"fields": fields}
+    return {
+        "fields": revised,
+        "critic_notes": notes,
+        "review_reasons": reasons,
+        "tool_calls": broker.record(),
+    }
+
+
+# ------------------------------------------------------------------ investigator
+
+
+def _values_by_doc(state: CaseState) -> dict[str, dict[str, str | None]]:
+    doc_type_by_id = {d["document_id"]: d["doc_type"] for d in state["documents"]}
+    values: dict[str, dict[str, str | None]] = {}
+    for field in state.get("fields", []):
+        doc_type = doc_type_by_id.get(str(field.get("document_id") or ""), "unknown")
+        values.setdefault(doc_type, {})[field["name"]] = field["value"]
+    return values
+
+
+async def investigator_node(state: CaseState) -> dict[str, Any]:
+    """Answer what the documents cannot answer, using MCP tools, in a bounded ReAct loop."""
+    started = time.perf_counter()
+    broker = ToolBroker.for_node("investigator")
+    questions = investigator_module.plan(_values_by_doc(state))
+    outcome = await investigator_module.investigate(questions, broker)
+
+    for step in outcome.steps:
+        await _emit(
+            state["case_id"],
+            "agent.investigate.step",
+            f"Step {step.index}: {step.action} → {step.observation}",
+            detail=step.as_dict(),
+            duration_ms=step.duration_ms,
+        )
+
+    findings: list[FindingState] = [
+        {
+            "code": str(item["code"]),
+            "severity": str(item["severity"]),
+            "title": str(item["title"]),
+            "description": str(item["description"]),
+            "policy_citation": item.get("policy_citation"),
+            "source": "investigator",
+        }
+        for item in outcome.findings
+    ]
+
+    await _emit(
+        state["case_id"],
+        "agent.investigate",
+        (
+            f"Investigator ran {len(outcome.steps)} step(s) and reached "
+            f"{len(outcome.findings)} conclusion(s)"
+            if outcome.steps
+            else "Nothing to investigate"
+        ),
+        detail={
+            "controller": outcome.controller,
+            "questions": [question.prompt for question in questions],
+            "step_limit": investigator_module.MAX_STEPS,
+            "tool_calls": broker.succeeded,
+        },
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    return {
+        "investigation": [step.as_dict() for step in outcome.steps],
+        "findings": await cite_findings(findings),
+        "review_reasons": outcome.review_reasons,
+        "tool_calls": broker.record(),
+    }
 
 
 # ---------------------------------------------------------------------- validate
 
 
 async def validate_node(state: CaseState) -> dict[str, Any]:
-    """Run the document type's rules and work out whether a human is needed."""
+    """Run the versioned rules, cite the policy behind each finding, calibrate confidence."""
     started = time.perf_counter()
     doc_types = await _load_doc_types()
-
-    # Group the values by document type so cross-document rules can compare them.
-    doc_type_by_id = {d["document_id"]: d["doc_type"] for d in state["documents"]}
-    values_by_doc: dict[str, dict[str, str | None]] = {}
-    for field in state["fields"]:
-        doc_type = doc_type_by_id.get(field["document_id"] or "", "unknown")
-        values_by_doc.setdefault(doc_type, {})[field["name"]] = field["value"]
+    values_by_doc = _values_by_doc(state)
 
     findings: list[FindingState] = []
     reasons: list[dict[str, str]] = []
+    packs_used: dict[str, str] = {}
+    not_evaluated: list[str] = []
 
-    for doc_type, definition in doc_types.items():
-        if doc_type not in values_by_doc:
-            continue
+    for doc_type in values_by_doc:
+        pack = rulepacks.pack_for(doc_type)
+        if pack is not None:
+            rules, pack_id, pack_version = pack.rules, pack.id, pack.version
+        else:
+            # No YAML pack covers this type, so the editable rows on the document type run
+            # instead — and the case records which source judged it.
+            definition = doc_types.get(doc_type)
+            if definition is None:
+                continue
+            rules = list(definition.rules or [])
+            pack_id, pack_version = "document_types table", definition.rules_version
+        packs_used[doc_type] = f"{pack_id}@{pack_version}"
+
         outcomes = rule_engine.evaluate(
-            list(definition.rules or []), values_by_doc, doc_type, today=date.today()
+            rules,
+            values_by_doc,
+            doc_type,
+            today=date.today(),
+            pack_id=pack_id,
+            pack_version=pack_version,
         )
         for outcome in outcomes:
+            if not outcome.evaluated:
+                not_evaluated.append(outcome.rule_id)
+                continue
             if outcome.passed:
                 continue
             findings.append(
@@ -246,51 +593,125 @@ async def validate_node(state: CaseState) -> dict[str, Any]:
                     "code": outcome.rule_id,
                     "severity": outcome.severity,
                     "title": outcome.message,
-                    "description": outcome.detail,
+                    "description": (
+                        f"{outcome.detail}. {outcome.explain}".strip()
+                        if outcome.explain
+                        else outcome.detail
+                    ),
                     "policy_citation": outcome.policy,
+                    "source": f"rules:{packs_used[doc_type]}",
                 }
             )
             if outcome.severity == Severity.critical.value:
                 reasons.append({"code": "DOCUMENT_EXPIRED", "label": outcome.message})
-            elif outcome.rule_id.endswith("MATCHES_MOA"):
+            elif outcome.rule_id.endswith("MATCHES_MOA") or outcome.rule_id.endswith(
+                "MATCHES_PASSPORT"
+            ):
                 reasons.append({"code": "CROSS_DOC_MISMATCH", "label": outcome.message})
 
-    # Low confidence on a critical field is the other route into review.
+    # --- calibration: raw score in, calibrated probability out ---
+    curve = calibration.active()
+    calibrated_fields: list[FieldState] = [
+        {**field, "calibrated_confidence": curve.apply(float(field.get("confidence", 0.0)))}
+        for field in state.get("fields", [])
+    ]
+
+    # Low confidence on a critical field is the other route into review. The *calibrated*
+    # number is what the threshold reads, because that is the one that means what it says.
     weak_critical = [
-        f
-        for f in state["fields"]
-        if f["is_critical"] and f["confidence"] < CRITICAL_FIELD_THRESHOLD
+        field
+        for field in calibrated_fields
+        if field["is_critical"]
+        and float(field.get("calibrated_confidence", 0.0)) < CRITICAL_FIELD_THRESHOLD
     ]
     for weak in weak_critical:
         reasons.append(
             {
                 "code": "LOW_CONFIDENCE_CRITICAL_FIELD",
-                "label": f"{weak['label_en']} read with {weak['confidence']:.0%} confidence",
+                "label": (
+                    f"{weak['label_en']} read with "
+                    f"{float(weak.get('calibrated_confidence', 0.0)):.0%} confidence"
+                ),
             }
         )
 
-    scored = [f["confidence"] for f in state["fields"] if f["confidence"] > 0]
+    # The case's confidence averages the fields that actually carry a value. A field the
+    # document simply does not contain is a completeness question — the "is present" rules
+    # answer it — and counting its low score here would make a perfectly read document look
+    # doubtful because its schema has optional fields.
+    scored = [
+        float(field.get("calibrated_confidence", 0.0))
+        for field in calibrated_fields
+        if field.get("value")
+    ]
     confidence = round(sum(scored) / len(scored), 3) if scored else 0.0
 
-    for finding in findings:
+    # --- policy citations, retrieved rather than hard-coded ---
+    # Only this node's own findings: `findings` has an append reducer, so the ones the
+    # guardrails and the investigator produced are already in the state, already cited.
+    new_findings = await cite_findings(findings)
+
+    for finding in new_findings:
         await _emit(
             state["case_id"],
             "agent.finding",
             f"{finding['severity'].upper()}: {finding['title']}",
-            detail={"code": finding["code"], "policy": finding["policy_citation"]},
+            detail={
+                "code": finding["code"],
+                "policy": finding.get("policy_citation"),
+                "quote": finding.get("policy_quote"),
+                "source": finding.get("source"),
+            },
         )
 
     await _emit(
         state["case_id"],
         "agent.validate",
-        f"{len(findings)} finding(s); overall confidence {confidence:.0%}",
+        f"{len(new_findings)} finding(s); overall confidence {confidence:.0%}",
         detail={
             "confidence": confidence,
-            "weak_critical_fields": [f["name"] for f in weak_critical],
+            "calibrated": curve.fitted,
+            "rule_packs": packs_used,
+            "rules_not_evaluated": not_evaluated,
+            "weak_critical_fields": [field["name"] for field in weak_critical],
         },
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
-    return {"findings": findings, "review_reasons": reasons, "confidence": confidence}
+    return {
+        "fields": calibrated_fields,
+        "findings": new_findings,
+        "review_reasons": reasons,
+        "confidence": confidence,
+        "rule_packs": packs_used,
+        "calibration": curve.as_dict(),
+    }
+
+
+async def cite_findings(findings: list[FindingState]) -> list[FindingState]:
+    """Attach the policy text behind each finding, retrieved from the index.
+
+    Most findings already name their section, so this is a look-up. The rest get the nearest
+    section by vector search, and anything with no good match gets no quote at all rather than
+    a misleading one.
+    """
+    cited: list[FindingState] = []
+    async with SessionLocal() as db:
+        for finding in findings:
+            quote = finding.get("policy_quote")
+            if not quote:
+                retrieved = await policy_index.cite(
+                    db,
+                    finding.get("policy_citation"),
+                    f"{finding['title']} {finding['description']}",
+                )
+                if retrieved is not None:
+                    finding = {
+                        **finding,
+                        "policy_citation": finding.get("policy_citation") or retrieved.citation,
+                        "policy_quote": retrieved.quote,
+                    }
+            cited.append(finding)
+    return cited
 
 
 # ------------------------------------------------------------------- review gate
@@ -318,11 +739,14 @@ async def review_gate_node(state: CaseState) -> dict[str, Any]:
                     "name": f["name"],
                     "label_en": f["label_en"],
                     "value": f["value"],
-                    "confidence": f["confidence"],
+                    "confidence": float(f.get("calibrated_confidence", f["confidence"])),
                     "is_critical": f["is_critical"],
+                    "critic": f.get("critic"),
                 }
                 for f in state["fields"]
-                if f["is_critical"] or f["confidence"] < FIELD_REVIEW_THRESHOLD
+                if f["is_critical"]
+                or float(f.get("calibrated_confidence", f["confidence"])) < FIELD_REVIEW_THRESHOLD
+                or (f.get("critic") or {}).get("agreed") is False
             ],
         }
     )
@@ -331,9 +755,8 @@ async def review_gate_node(state: CaseState) -> dict[str, Any]:
     corrections: dict[str, str] = dict(decision.get("corrections") or {})
     verdict = str(decision.get("decision", "approve"))
 
-    # The corrections are returned as data, not applied to `fields` here: `fields` uses an
-    # append reducer, so rewriting it would duplicate every row. The runner applies them when
-    # it saves the case, in one place.
+    # The corrections are returned as data, not applied to `fields` here: the runner applies
+    # them when it saves the case, in one place.
     await _emit(
         state["case_id"],
         "agent.review.resumed",
@@ -350,6 +773,7 @@ async def finalize_node(state: CaseState) -> dict[str, Any]:
     """Close the case out. Posting to core banking is wired in M4."""
     decision = state.get("decision") or "auto"
     straight_through = decision == "auto"
+    extractor = get_extractor()
     await _emit(
         state["case_id"],
         "agent.finalize",
@@ -358,6 +782,12 @@ async def finalize_node(state: CaseState) -> dict[str, Any]:
             if straight_through
             else f"Completed after review: {decision}"
         ),
-        detail={"straight_through": straight_through, "decision": decision},
+        detail={
+            "straight_through": straight_through,
+            "decision": decision,
+            "tool_calls": len(state.get("tool_calls", [])),
+            "rule_packs": state.get("rule_packs", {}),
+        },
+        model_version=extractor.model_version,
     )
     return {"straight_through": straight_through, "needs_review": False}

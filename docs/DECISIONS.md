@@ -250,3 +250,113 @@ from the graph module and reports `source: "live"`.
 **Same rule elsewhere:** the New case "what happens next" panel and the pipeline stepper both read
 one step list, mirrored on the backend in `services/progress.py`. Guardrails are deliberately absent
 from it until M3 builds them — a step that never lights up reads as a bug, not as honesty.
+
+### 34. The pipeline reads the cleaned text, never the PII-tokenised copy
+**Why:** The guardrails node produces two copies of a document's text, and mixing them up is a real
+bug, not a style point. The first build tokenised identifiers and then handed *that* to the
+extractor, so every date became `<DOB_1>` and every extraction failed. The rule now is explicit:
+`clean_text` (invisible characters and markup removed, values intact) is what the pipeline reads;
+`log_text` (identifiers replaced with stable tokens) is the only form allowed into a log, a trace
+or an evaluation fixture.
+**Worth remembering:** tokenisation protects the *observability* path, not the processing path. The
+case record is access-controlled and audited; the log is read by engineers and copied into tests.
+
+### 35. Platt scaling, written by hand, instead of scikit-learn
+**Why:** Calibration here is one logistic curve with two parameters. Forty lines of gradient descent
+keeps a 300 MB numeric stack out of the API image, stays deterministic, and — the part that matters
+in a bank — can be explained to an auditor in one sentence: "we learned how much to trust the
+extractor's own score, and applied that correction."
+**The trap it fell into first:** the initial settings (400 steps, rate 0.5) stopped well short of
+the minimum. The curve it produced scored *worse* than doing nothing, the guard below caught it, and
+calibration silently never turned on. Two thousand steps at rate 1.0 converges in milliseconds.
+**The guard that saved it:** if the fitted curve's Brier score is worse than the raw scores', the
+fit is discarded and the product keeps showing raw numbers, labelled as raw.
+**Later:** isotonic regression and MLflow tracking arrive in M5 with the golden set, where the extra
+flexibility has enough data to earn its place.
+
+### 36. Ground truth comes from reviewers, not from a labelling exercise
+**Why:** Every field a reviewer looked at is a labelled example, for free, growing every day: a field
+they accepted was read correctly, a field they corrected was not. Only cases a human actually
+completed are counted. Fields from straight-through cases are excluded deliberately — nobody checked
+them, and counting them as "right" would teach the curve to be over-confident about exactly the
+cases nobody verified.
+
+### 37. Four MCP servers as four processes, not four functions
+**Why:** "Least privilege" is only true if the privileges are actually separate. Each server is its
+own container with its own tool set; the document store's volume is mounted read-only; core banking
+is the only one that can write anything. The investigator is never given core banking's address,
+and the broker in the API refuses that call by name as a second, independent lock.
+**Also:** the servers are the real MCP Python SDK over streamable HTTP, with DNS-rebinding
+protection left on and each service's hostname allowlisted in `compose.yaml` — rather than switched
+off with a wildcard.
+
+### 38. A failed tool call is a failed check, never a silent pass
+**Why:** If the sanctions server cannot be reached, the honest outcome is "this party was not
+screened", which sends the case to a person. The alternative — falling back to a local imitation of
+the tool — would make an unperformed check look like a passed one, which is the single most
+dangerous thing an assurance system can do.
+**Consequence:** there is no local fallback for any MCP tool. Failures are recorded in the case's
+tool-call list and raise a finding.
+
+### 39. The ReAct controller is deterministic in demo mode, and says so
+**Why:** Demo mode has no model. The investigator still runs a real reason → act → observe loop with
+real tools and a real step limit; what chooses the next action is a small rule-based controller
+rather than a model. Azure mode swaps the controller and changes nothing else.
+**Honesty:** the UI names the controller, because "an agent decided" and "a rule decided" are not the
+same claim.
+
+### 40. Rules moved to versioned YAML packs, with a named-check escape hatch
+**Why:** A bank rule changing should be a diff in a pull request with a version number, not a
+deployment of new logic. Each document type has one pack file carrying a semantic version, and the
+version that judged a case is recorded on the case, so an audit two years later can be read against
+the rules in force at the time.
+**The escape hatch:** some rules ("every shareholder has an identity document in this case") compare
+a list against the *set of documents*, which no two-value expression can say. Those are Python
+functions in a registry, and a pack refers to one by name. Adding a rule is configuration; adding a
+new *kind* of check is code, and the difference is visible in the YAML.
+**Fallback:** a document type with no pack falls back to the editable rows on the document type, and
+the case records which source judged it.
+
+### 41. A rule that did not run is not a rule that passed
+**Why:** The engine returns `evaluated: False` with a reason whenever the values a rule needs are
+missing or the expression is not supported. Callers must not read `passed` as a verdict when that
+flag is false. The alternative — treating "could not check" as "checked and fine" — is how
+assurance systems quietly stop assuring anything.
+**Related:** a rule may carry a `when:` guard so it only applies in the state it makes sense in.
+"Expires within 30 days" is a useful warning about a valid licence and a nonsense sentence about one
+that lapsed in 2019, where a different rule already fired.
+
+### 42. Self-correction repairs near the label, never anywhere on the page
+**Why:** The first version of the date repair searched the whole document as a last resort. On a
+trade licence that cheerfully put the *issue* date into the *expiry* field and called it a repair.
+A wrong value that validates is far more dangerous than an empty one, because nothing downstream can
+tell it is wrong. Repairs now look only at the lines under the field's own label, and a field that
+cannot be filled is left empty with every attempt recorded.
+
+### 43. The case's confidence averages the fields that have a value
+**Why:** A schema has optional fields. Including a field the document simply does not contain — which
+scores low because it is not grounded anywhere — made a perfectly read document look doubtful.
+Completeness is a separate question, and the `is present` rules answer it.
+
+### 44. Read-only requests must end their transaction
+**Why:** A read-only request still opens a transaction, and a connection returned to the pool without
+a commit or a rollback sits **idle in transaction**. A handful of those, from ordinary GET requests,
+blocked the LangGraph checkpointer's `CREATE INDEX CONCURRENTLY` on a fresh database — that
+statement waits for every open transaction to finish — and every case stopped before its first node
+with no error anywhere in the logs.
+**The fix, in two parts:** the request session now rolls back on the way out, and the checkpointer is
+set up during application startup, before the server accepts traffic.
+**Worth remembering:** this had been latent since M1 and only appeared when the database was wiped,
+because the checkpoint tables already existed on every previous run. A clean `docker compose down -v`
+before a milestone check is not ceremony.
+
+### 45. Evidence is read from the checkpoint, not copied into new tables
+**Why:** The case screen's Assurance tab shows guardrail reports, worker results, the critic's notes,
+the investigator's trail and every tool call. All of it is already in the LangGraph checkpoint, which
+is the state the graph resumes from. Reading it there means the panel and the pipeline cannot
+disagree; copying it into tables would create a second version of the truth to keep in step.
+**Its limit:** a seeded demo case has no checkpoint, and the panel says exactly that rather than
+showing an empty page that looks like a failure.
+**The bug it caused:** the panel fetched once on mount and froze whatever half-finished snapshot it
+caught — "0 steps" for a run that did six. It now follows the case while it is moving and refetches
+once when the status settles.

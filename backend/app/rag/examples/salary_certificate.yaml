@@ -1,0 +1,50 @@
+# Worked extraction examples for salary certificates — use case 2, configuration only.
+doc_type: salary_certificate
+examples:
+  - id: sc_basic_and_total
+    note: Both salary figures present, currency written as AED with thousands separators
+    text: |
+      SALARY CERTIFICATE
+      Employee name
+      Priya Nair
+      Employer name
+      Zenith Cloud Services
+      Designation
+      Senior Engineer
+      Basic salary
+      AED 22,000
+      Total salary
+      AED 31,500
+      Issue date
+      2026-07-02
+    expected:
+      employee_name: Priya Nair
+      employer_name: Zenith Cloud Services
+      designation: Senior Engineer
+      basic_salary: AED 22,000
+      total_salary: AED 31,500
+      issue_date: "2026-07-02"
+
+  - id: sc_with_iban
+    note: Salary transfer IBAN present and grouped with spaces
+    text: |
+      SALARY CERTIFICATE
+      Employee name
+      Youssef Karam
+      Employer name
+      Blue Horizon Shipping
+      Basic salary
+      AED 18,000
+      Total salary
+      AED 24,300
+      IBAN
+      AE07 0331 2345 6789 0123 456
+      Issue date
+      2026-08-15
+    expected:
+      employee_name: Youssef Karam
+      employer_name: Blue Horizon Shipping
+      basic_salary: AED 18,000
+      total_salary: AED 24,300
+      iban: AE07 0331 2345 6789 0123 456
+      issue_date: "2026-08-15"

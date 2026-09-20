@@ -207,3 +207,78 @@ attempts. *Like a bouncer and a metal detector.*
 *Like a flight recorder.*
 
 **MLflow** — a tool that tracks machine-learning experiments and models. *Like a lab notebook.*
+
+## Added in M3
+
+**Guardrail** — a check that runs before or after the AI, not inside it. *Like the handrails on a
+staircase: they do not help you climb, they stop you falling.*
+
+**Least privilege** — giving each part of a system only the permissions it needs. *Like a hotel key
+card that opens your room and the gym, but not the safe in reception.*
+
+**Tool allowlist** — the named list of tools one part of the agent may call. Asking for anything
+else fails before a request is made.
+
+**Streamable HTTP** — the transport the MCP servers speak. *Like a phone line the tool server
+answers on, rather than a program you have to start yourself.*
+
+**DNS-rebinding protection** — a server checking which hostname a request claims to be for, so a web
+page cannot trick a browser into talking to an internal service. Left switched on here, with each
+service's own name allowlisted.
+
+**Idle in transaction** — a database connection that opened a transaction and never finished it. It
+holds locks and blocks other work; it caused a real outage in this project (DECISIONS #44).
+
+**Superstep** — one round of a LangGraph run. Everything sent out in parallel runs in the same
+superstep, and the next node waits for all of it. *Like a relay: the next runner starts when every
+runner in this leg is home.*
+
+**Reducer** — the rule for combining two writes to the same piece of state. *Like deciding whether a
+shared shopping list gets appended to or replaced.*
+
+**Fan-out** — sending one piece of work to many workers at once. The Send API is how this graph does
+it.
+
+**Self-correction loop limit** — the hard cap on how many times a worker may retry. Two here. An
+agent with no limit is the standard way to spend an afternoon and a fortune on one document.
+
+**Grounded value** — one that can be found, word for word, in the document it came from. A value
+that cannot be is the strongest reason to distrust it.
+
+**Confidence signal** — one fact contributing to a confidence score: page read quality, grounding,
+label match, format match, critic agreement. The score is their weighted average.
+
+**Platt scaling** — fitting one S-shaped curve that maps a raw score to a real probability. *Like
+learning that a friend who says "definitely" is right about 70% of the time, and adjusting.*
+
+**Brier score** — how far stated probabilities were from what happened, lower being better. *Like
+scoring a weather forecaster on every forecast they made.*
+
+**Reliability bin** — a bar of the calibration chart: "when we said about 80%, we were right 73% of
+the time".
+
+**Rule pack** — one versioned YAML file holding the rules for one document type. Changing a bank
+rule is then a diff in a pull request, not a code deployment.
+
+**Named check** — a rule written as a Python function because it cannot be expressed as a comparison
+of two values, referred to from a pack by name.
+
+**Guard (`when:`)** — a condition that decides whether a rule applies at all. "Expires within 30
+days" is nonsense about a licence that lapsed three years ago.
+
+**Chunking** — splitting a document into pieces small enough to retrieve. Here one piece is one
+policy section, because that is the unit a finding cites.
+
+**Cosine similarity** — how close two vectors point in the same direction, used to find the nearest
+policy section. *Like judging whether two people are talking about the same topic by how much
+vocabulary they share.*
+
+**Hashed lexical embedding** — a vector built by hashing words into buckets rather than by a model.
+Honest about being about *words*, not meaning; it matches "expired licence" to a section on expired
+licences, and does not know "lapsed" is the same thing.
+
+**Few-shot example selection** — picking the worked examples most like the document in front of you,
+rather than sending the same fixed ones every time.
+
+**Policy citation** — the section of policy behind a finding, quoted from the indexed corpus, so a
+reviewer can see the rule as written rather than a paraphrase of it.

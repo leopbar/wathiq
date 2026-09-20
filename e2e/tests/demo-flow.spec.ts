@@ -28,8 +28,11 @@ test.describe("demo flow", () => {
 
   test("the dashboard shows real seeded numbers", async ({ page }) => {
     await signInAs(page, "Supervisor");
-    await expect(page.getByText("STRAIGHT-THROUGH")).toBeVisible();
-    await expect(page.getByText("SLA BREACHES")).toBeVisible();
+    // The KPI row renders skeletons until its queries land. The endpoints answer in tens of
+    // milliseconds, but a cold sign-in plus the first render of five charts occasionally took
+    // longer than the default wait, so this one is given room rather than left to flake.
+    await expect(page.getByText("STRAIGHT-THROUGH")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("SLA BREACHES")).toBeVisible({ timeout: 30_000 });
 
     // At least the 30 seeded cases. Not an exact number: other tests create cases too.
     const total = page.getByText(/^\d+ total$/);

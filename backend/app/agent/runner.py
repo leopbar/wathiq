@@ -109,6 +109,11 @@ async def _initial_state(case: models.Case) -> CaseState:
         "fields": [],
         "findings": [],
         "review_reasons": [],
+        "guardrails": [],
+        "worker_results": [],
+        "critic_notes": [],
+        "investigation": [],
+        "tool_calls": [],
     }
 
 
@@ -154,10 +159,13 @@ async def _persist(db, case: models.Case, state: dict[str, Any]) -> None:
     )
     for field_state in state.get("fields", []):
         corrected = corrections.get(field_state["name"])
-        confidence = 1.0 if corrected is not None else field_state["confidence"]
+        raw = float(field_state["confidence"])
+        calibrated = float(field_state.get("calibrated_confidence", raw))
+        # The threshold reads the calibrated number, because that is the one that means what
+        # it says: "right about this often", not "the extractor felt this sure".
         if corrected is not None:
             status = FieldStatus.corrected
-        elif confidence >= AUTO_ACCEPT_THRESHOLD:
+        elif calibrated >= AUTO_ACCEPT_THRESHOLD:
             status = FieldStatus.auto_accepted
         else:
             status = FieldStatus.needs_review
@@ -172,10 +180,11 @@ async def _persist(db, case: models.Case, state: dict[str, Any]) -> None:
                 label_ar=field_state["label_ar"],
                 value=field_state["value"],
                 corrected_value=corrected,
-                confidence=field_state["confidence"],
-                # Real calibration arrives in M3; until then we are honest and show the raw
-                # score in both places rather than inventing a calibrated number.
-                calibrated_confidence=field_state["confidence"],
+                confidence=raw,
+                # Equal to the raw score until a curve has been fitted, and the UI says so
+                # rather than dressing an uncalibrated number up as a calibrated one.
+                calibrated_confidence=calibrated,
+                signals=field_state.get("signals"),
                 status=status,
                 is_critical=field_state["is_critical"],
                 page=field_state.get("page"),
@@ -205,6 +214,7 @@ async def _persist(db, case: models.Case, state: dict[str, Any]) -> None:
                 title=finding_state["title"],
                 description=finding_state["description"],
                 policy_citation=finding_state["policy_citation"],
+                policy_quote=finding_state.get("policy_quote"),
                 status=previous_status.get(finding_state["code"], FindingStatus.open),
             )
         )
@@ -310,7 +320,16 @@ async def _create_review_tasks(db, case: models.Case, reasons: list[dict[str, st
             )
         ).scalars()
     }
-    mandatory = {"SANCTIONS_POSSIBLE_MATCH", "DOCUMENT_EXPIRED", "NEW_DOCUMENT_TYPE"}
+    # Mandatory means "a human must decide, whatever the confidence". The first three are
+    # the ones the specification names; the last two were added in M3 because a flagged
+    # upload and a company the registry says is not trading are the same kind of stop.
+    mandatory = {
+        "SANCTIONS_POSSIBLE_MATCH",
+        "DOCUMENT_EXPIRED",
+        "NEW_DOCUMENT_TYPE",
+        "UNSAFE_CONTENT",
+        "REGISTRY_STATUS_NOT_ACTIVE",
+    }
     seen: set[str] = set()
 
     for reason in reasons:
@@ -376,6 +395,21 @@ async def _fail(case_id: UUID, message: str) -> None:
             actor_type=ActorType.system,
         )
         await db.commit()
+
+
+async def get_state(thread_id: str) -> dict[str, Any] | None:
+    """The graph's own state for a thread, straight from the checkpoint.
+
+    This is what makes the assurance panel possible without a second copy of the evidence in
+    its own tables: the guardrail reports, the critic's notes and the investigator's trail are
+    already in the checkpointed state, and the checkpoint is the record the graph resumes
+    from, so the panel and the pipeline can never disagree.
+    """
+    graph = await _compiled()
+    snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
+    if snapshot is None or not snapshot.created_at:
+        return None
+    return dict(snapshot.values or {})
 
 
 async def has_checkpoint(thread_id: str) -> bool:

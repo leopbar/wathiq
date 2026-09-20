@@ -62,11 +62,31 @@ class CalibrationPointOut(Schema):
     n: int
 
 
+class CurveOut(BaseModel):
+    """The fitted mapping from a raw score to a calibrated probability."""
+
+    a: float
+    b: float
+    fitted: bool
+    sample_count: int
+    brier_before: float
+    brier_after: float
+    improvement: float
+    model_version: str
+
+
 class Calibration(BaseModel):
     points: list[CalibrationPointOut]
     ece: float
     brier: float
     model_version: str
+    # The curve itself, so the chart can say whether the numbers on it went through one.
+    curve: CurveOut
+    method: str = "Platt scaling (one logistic curve, two parameters)"
+    ground_truth: str = (
+        "Every field a reviewer looked at: accepted means the extractor was right, corrected "
+        "means it was wrong. Only cases a human completed are counted."
+    )
 
 
 class RunRequest(BaseModel):

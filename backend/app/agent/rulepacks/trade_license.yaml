@@ -1,0 +1,60 @@
+# Trade licence rule pack.
+#
+# Versioning: MAJOR = a rule changes what a case outcome means, MINOR = a rule added,
+# PATCH = wording or explanation only. The version is recorded on every finding, so a case
+# reviewed last month can always be read against the rules that were in force then.
+id: trade_license
+version: 1.2.0
+title: Trade licence
+applies_to: [trade_license]
+description: >-
+  Checks a company trading licence: it must still be valid, its dates must make sense, and the
+  company name must agree with the memorandum of association.
+rules:
+  - id: TL_NOT_EXPIRED
+    expr: "expiry_date > today"
+    severity: critical
+    message: Trade licence is expired
+    policy: KYC-POL-004 §3.2
+    explain: >-
+      A bank may not refresh a corporate file on an expired licence. This is a mandatory stop:
+      the case always goes to a person.
+
+  - id: TL_ISSUE_BEFORE_EXPIRY
+    expr: "issue_date < expiry_date"
+    severity: warning
+    message: Issue date is not before the expiry date
+    policy: KYC-POL-004 §3.1
+    explain: >-
+      Dates that run backwards usually mean the two values were read from the wrong places, so
+      the extraction is suspect even if both dates look valid on their own.
+
+  - id: TL_EXPIRES_SOON
+    expr: "expiry_date > today + 30 days"
+    # Only worth saying about a licence that is still valid. One that already expired is
+    # covered by TL_NOT_EXPIRED, and "expires within 30 days" would be a nonsense sentence
+    # about it.
+    when: "expiry_date > today"
+    severity: info
+    message: Trade licence expires within 30 days
+    policy: KYC-POL-004 §3.4
+    explain: >-
+      Not a blocker. The relationship manager is told so a renewal can be requested before the
+      file goes stale again.
+
+  - id: TL_NAME_MATCHES_MOA
+    expr: "trade_license.company_name_en ~= moa.company_name_en"
+    severity: warning
+    message: Company name differs from the memorandum of association
+    policy: KYC-POL-006 §2.1
+    explain: >-
+      Compared loosely on purpose: "Al Noor Trading LLC" and "Al Noor Trading L.L.C." are the
+      same company. A real difference sends the case to the investigator, which asks the
+      company registry which name is registered.
+
+  - id: TL_NUMBER_PRESENT
+    expr: "license_number is present"
+    severity: critical
+    message: Licence number is missing
+    policy: KYC-POL-004 §1.1
+    explain: The licence number is the key the company registry is looked up by.

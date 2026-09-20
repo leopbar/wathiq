@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ClipboardCheck, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
-import type { CaseDetail as CaseDetailType, ExtractedField } from "@/lib/types";
+import type { CaseAssurance, CaseDetail as CaseDetailType, ExtractedField } from "@/lib/types";
 import { CASE_TYPE_LABEL } from "@/lib/constants";
 import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
 import { useAuth } from "@/auth/useAuth";
@@ -26,6 +26,7 @@ import { DocumentList } from "./case/DocumentList";
 import { DocumentViewer } from "./case/DocumentViewer";
 import { FieldsPanel } from "./case/FieldsPanel";
 import { FindingsPanel } from "./case/FindingsPanel";
+import { AssurancePanel } from "./case/AssurancePanel";
 
 function MetaItem({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -57,6 +58,30 @@ export default function CaseDetail() {
   });
 
   const caseData = query.data;
+  // While the pipeline is still moving, the checkpoint grows: guardrails, then workers, then
+  // the critic, then the investigation. A single fetch on mount would freeze whatever
+  // half-finished snapshot it happened to catch, so this follows the case the same way the
+  // detail query does and stops as soon as the run settles.
+  const caseIsMoving = caseData?.status === "intake" || caseData?.status === "processing";
+
+  // The evidence behind the case: guardrails, workers, critic, investigation, tool calls.
+  // Read from the agent's checkpoint, so it only exists once the case has actually run.
+  const assuranceQuery = useQuery({
+    queryKey: qk.caseAssurance(id),
+    queryFn: () => apiFetch<CaseAssurance>(`/cases/${id}/assurance`),
+    enabled: Boolean(id),
+    staleTime: 0,
+    refetchInterval: caseIsMoving ? 1_000 : false,
+  });
+
+  // Polling stops the moment the case settles, and the last poll before that almost always
+  // caught the checkpoint one node short — leaving the panel showing "0 steps" for a run that
+  // did six. One refetch on every status change closes that gap.
+  const caseStatus = caseData?.status;
+  const refetchAssurance = assuranceQuery.refetch;
+  useEffect(() => {
+    if (caseStatus) void refetchAssurance();
+  }, [caseStatus, refetchAssurance]);
 
   useEffect(() => {
     if (caseData && !selectedDocumentId && caseData.documents.length > 0) {
@@ -232,6 +257,32 @@ export default function CaseDetail() {
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin">
                     <FindingsPanel findings={detail.findings} />
+                  </div>
+                ),
+              },
+              {
+                value: "assurance",
+                label: "Assurance",
+                badge:
+                  assuranceQuery.data?.available === false ? (
+                    <Badge tone="outline">seeded</Badge>
+                  ) : assuranceQuery.data ? (
+                    <Badge tone="neutral">{assuranceQuery.data.tool_calls.length} tools</Badge>
+                  ) : undefined,
+                content: (
+                  <div className="h-full overflow-y-auto scroll-thin">
+                    {assuranceQuery.data ? (
+                      <AssurancePanel assurance={assuranceQuery.data} />
+                    ) : (
+                      <EmptyState
+                        title={assuranceQuery.isPending ? "Loading…" : "No evidence available"}
+                        description={
+                          assuranceQuery.isPending
+                            ? "Reading the agent's checkpoint."
+                            : "The agent checkpoint for this case could not be read."
+                        }
+                      />
+                    )}
                   </div>
                 ),
               },
