@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     mode: Mode = "demo"
     environment: str = "local"
     log_level: str = "INFO"
+    mlflow_tracking_uri: str = ""
 
     # --- database -------------------------------------------------------
     database_url: str = "postgresql+psycopg://wathiq:wathiq@db:5432/wathiq"

@@ -11,10 +11,13 @@ inventing content. The UI labels this "demo OCR".
 
 from __future__ import annotations
 
+import io
 import re
 import zlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+
+from pypdf import PdfReader
 
 # `(some text) Tj` — the PDF operator that draws a string.
 _TJ = re.compile(rb"\((?:[^()\\]|\\.)*\)\s*Tj")
@@ -71,8 +74,18 @@ class DemoOcr(OcrBackend):
 
     def read(self, data: bytes, mime_type: str) -> OcrResult:
         if mime_type == "application/pdf" or data[:5] == b"%PDF-":
-            lines = _extract_pdf_lines(data)
-            pages = max(1, data.count(b"/Type /Page") - data.count(b"/Type /Pages"))
+            try:
+                reader = PdfReader(io.BytesIO(data))
+                lines = [
+                    line.strip()
+                    for page in reader.pages
+                    for line in (page.extract_text() or "").splitlines()
+                    if line.strip()
+                ]
+                pages = len(reader.pages)
+            except Exception:
+                # Malformed uploads must fail closed, never invent a text layer.
+                lines, pages = [], 1
             if lines:
                 # A text layer is read exactly, so confidence is high but not a fake 1.0.
                 return OcrResult(

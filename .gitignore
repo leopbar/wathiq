@@ -54,3 +54,5 @@ Thumbs.db
 # not part of the product.
 docs/SPEC.md
 CLAUDE.md
+# Local milestone screenshots and verification artifacts
+.artifacts/

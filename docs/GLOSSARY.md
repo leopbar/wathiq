@@ -358,3 +358,25 @@ append-only, and since M4 a database trigger enforces it rather than the code me
 
 **Trigger** — a rule the database runs by itself whenever a row changes. Wathiq's raises an error on
 any attempt to update or delete an audit entry.
+
+## Added in M5
+
+**Golden dataset** — synthetic documents with independently authored expected answers; like an
+exam with a sealed answer sheet.
+
+**Regression snapshot** — a saved input and reviewer-corrected answer replayed after code changes;
+like keeping a repaired part to check that the same defect never returns.
+
+**Negative control** — a deliberately broken result that must fail a check; like testing a smoke
+alarm with test smoke before trusting its silence.
+
+**Prompt sensitivity** — whether rewording an instruction changes its answer. Stability alone does
+not mean correctness: a model can consistently give the wrong answer.
+
+**Brier score** — the average squared difference between each probability and its actual outcome.
+Lower is better; chart-bin averages cannot substitute for the individual outcomes.
+
+**Training metric** — a measurement on the data used to fit a model; useful for diagnosis, but not
+proof that it works on unseen data.
+
+**MLflow experiment** — a logbook of fit attempts, parameters and metrics, allowing comparisons.

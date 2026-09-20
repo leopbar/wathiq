@@ -30,7 +30,7 @@ from typing import Any
 from app.agent.extractor import parse_date
 from app.agent.tools import ToolBroker
 
-_NORMALISE = re.compile(r"[^a-z0-9]+")
+_NORMALISE = re.compile(r"[^\w]+")
 _WHITESPACE = re.compile(r"\s+")
 _NUMBER = re.compile(r"^-?[\d,]+(\.\d+)?$")
 _CURRENCY = re.compile(r"\b(aed|usd|dhs|dirhams?)\b", re.IGNORECASE)

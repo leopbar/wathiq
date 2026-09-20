@@ -8,6 +8,8 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 1001 wathiq && useradd --uid 1001 --gid 1001 --create-home wathiq
 
 # ---------- dependency layers (cached on pyproject/uv.lock only) ----------

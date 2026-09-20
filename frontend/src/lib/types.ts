@@ -265,6 +265,8 @@ export interface QualityBand {
 export interface QualitySummary {
   bands: QualityBand[];
   overall_score: number;
+  total_cases: number;
+  regression_cases: number;
 }
 
 export interface QualityRun {
@@ -277,13 +279,23 @@ export interface QualityRun {
   score: number;
   triggered_by: string;
   commit_sha: string;
+  provenance: {
+    kind?: string;
+    dataset?: string;
+    scope?: string;
+    sample_count?: number;
+    prompt_key?: string;
+    prompt_version?: string;
+    sensitivity?: { status: string; reason: string; sample_count: number; variants: string[] };
+  };
 }
 
 export interface QualityRunCase {
   id: string;
   name: string;
   band: string;
-  status: "passed" | "failed";
+  passed: boolean;
+  is_regression: boolean;
   expected: string;
   actual: string;
   note: string;
@@ -313,6 +325,9 @@ export interface QualityCalibration {
   curve: CalibrationCurve;
   method: string;
   ground_truth: string;
+  sample_count: number;
+  metric_scope: string;
+  tracking: { status: string; reason?: string; run_id?: string; experiment_id?: string };
 }
 
 /* ------------------------------ prompt studio ----------------------------- */

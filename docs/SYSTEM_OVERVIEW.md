@@ -66,3 +66,10 @@ AI reasoning and the audit trail.
 
 Simulated parts (core banking, company registry, sanctions screening) are labelled `Simulated`
 everywhere they appear. They are real services with real contracts talking to synthetic data.
+
+## Quality feedback loop (M5)
+Quality Lab runs five real diagnostic bands against synthetic answer keys. Reviewer corrections
+become saved regression inputs; exported synthetic snapshots can run in CI. Prompt Studio links
+checks to exact prompt versions. Calibration reports its sample count and training scope, and can
+log fits in optional MLflow. Model wording sensitivity is deliberately unmeasured in offline mode;
+its tested harness awaits the M6 model adapter. See [QUALITY.md](QUALITY.md).

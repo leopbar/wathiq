@@ -211,10 +211,10 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
   top_findings: { code: string; title: string; count: number }[]; }
 ```
 
-### Quality Lab (M1: seeded read-only)
+### Quality Lab (M5: measured evaluations)
 `GET /quality/summary` → `{ bands: { band: string; label: string; passed: number; failed: number; total: number; score: number; last_run_at: string }[]; overall_score: number; }`
 `GET /quality/runs?band=` → `Page<{ id; band; started_at; finished_at; passed; failed; score; triggered_by; commit_sha }>`
-`GET /quality/runs/{id}` → `{ run, cases: { id; name; band; status:"passed"|"failed"; expected; actual; note }[] }`
+`GET /quality/runs/{id}` → `{ run, cases: { id; name; band; passed:boolean; expected; actual; note; is_regression }[] }`
 `GET /quality/calibration` →
 ```ts
 { points: { predicted: number; observed: number; n: number }[];
@@ -227,14 +227,22 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
 has decided (accepted = the extractor was right, corrected = it was wrong). Refuses to fit on too
 little data, or when the fit would score worse than the raw numbers. Admin and supervisor only.
 `POST /quality/runs` → `{ band: QualityBand | "all" }` starts a run; `"all"` (the default) runs every
-band. M1 returns the most recent seeded run instead of starting a real evaluation.
+band. Returns `{ runs: QualityRun[] }` after completion; all five produces five records.
+Each run includes `provenance` (dataset, model, sample count, scope and optional prompt identity).
+The summary excludes illustrative seed data and counts permanent regression examples separately.
+`GET /quality/dataset` → authenticated ZIP with 50 PDFs and answer keys.
+`GET /quality/regressions/export` → synthetic correction snapshots for the checked-in CI fixture.
+Calibration also returns `sample_count`, `metric_scope` and MLflow `tracking` status.
 
-### Prompt Studio (M1: seeded read-only)
+### Prompt Studio
 `GET /prompts` → `{ id; key; name; latest_version; status; document_type; updated_at; versions_count }[]`
 `GET /prompts/{key}/versions` → `{ id; version; status:"draft"|"approved"|"retired"; body; notes; created_by; created_at; approved_by; approved_at; eval_score: number|null }[]`
 `GET /prompts/{key}/diff?from=&to=` → `{ from, to, unified_diff: string }`
 `POST /prompts/{key}/versions/{version}/approve` → version (admin only)
 `POST /prompts/{key}/versions/{version}/retire` → version (admin only)
+`POST /prompts/{key}/versions/{version}/evaluate` → `{ runs: QualityRun[] }` (admin, supervisor, reviewer).
+`GET /prompts/{key}/versions/{version}/evaluations` → measured history for that version.
+Live wording sensitivity is unsupported by the demo reader; see [QUALITY.md](QUALITY.md).
 
 ### Settings
 `GET /settings/document-types` → `{ id; key; name_en; name_ar; version; fields: {name,label_en,label_ar,type,required,is_critical}[]; rules_count; is_active }[]`

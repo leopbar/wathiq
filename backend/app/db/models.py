@@ -412,6 +412,7 @@ class QualityRun(Base):
     score: Mapped[float] = mapped_column(Float, default=0.0)
     triggered_by: Mapped[str] = mapped_column(String(120), default="ci")
     commit_sha: Mapped[str] = mapped_column(String(40), default="")
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = created_at_col()
 
     cases: Mapped[list[QualityCase]] = relationship(
@@ -437,6 +438,20 @@ class QualityCase(Base):
     run: Mapped[QualityRun] = relationship(back_populates="cases")
 
 
+class RegressionExample(Base):
+    """Immutable input and answer snapshot, independent of later case processing."""
+
+    __tablename__ = "regression_examples"
+    id: Mapped[UUID] = uuid_pk()
+    source_key: Mapped[str] = mapped_column(String(160), unique=True)
+    document_type: Mapped[str] = mapped_column(String(40))
+    field_name: Mapped[str] = mapped_column(String(100))
+    expected: Mapped[str] = mapped_column(Text)
+    input_text: Mapped[str] = mapped_column(Text)
+    field_schema: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class CalibrationPoint(Base):
     """Reliability curve: how often a stated confidence was actually right."""
 
@@ -453,6 +468,14 @@ class CalibrationPoint(Base):
         CheckConstraint("predicted >= 0 AND predicted <= 1", name="predicted_range"),
         CheckConstraint("observed >= 0 AND observed <= 1", name="observed_range"),
     )
+
+
+class CalibrationExperiment(Base):
+    __tablename__ = "calibration_experiments"
+    id: Mapped[UUID] = uuid_pk()
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    tracking: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at_col()
 
 
 class CalibrationCurve(Base):

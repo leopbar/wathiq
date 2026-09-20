@@ -1,6 +1,6 @@
 import { CheckCircle2, CircleDot, Archive } from "lucide-react";
 import type { PromptStatus, PromptVersion } from "@/lib/types";
-import { formatDateTime, formatPercent } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 
@@ -58,11 +58,6 @@ export function VersionTimeline({
                     v{version.version}
                   </span>
                   <Badge tone={STATUS_TONE[version.status]}>{version.status}</Badge>
-                  {version.eval_score !== null ? (
-                    <Badge tone={version.eval_score >= 0.9 ? "success" : "warning"}>
-                      eval {formatPercent(version.eval_score, 1)}
-                    </Badge>
-                  ) : null}
                 </span>
                 <span className="mt-0.5 block truncate text-caption text-ink-2">
                   {version.created_by} · {formatDateTime(version.created_at)}

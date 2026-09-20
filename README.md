@@ -11,8 +11,9 @@ doubtful cases to a human — with every step evidenced and audited.
 
 </div>
 
-> **Status:** milestone M1 (foundation) complete — the whole system runs, all ten screens are live
-> against the real API with 30 seeded synthetic cases. The agent pipeline is connected in M2.
+> **Status:** M1–M4 complete. M5 adds measured Quality Lab suites, golden documents, reviewer
+> regression snapshots, prompt-version diagnostics and optional MLflow tracking. Real model
+> wording sensitivity awaits M6; demo mode explicitly reports it as unsupported.
 > Progress: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ---
@@ -34,6 +35,7 @@ Then open **http://localhost:5173** and click any role on the sign-in screen.
 | Web console | http://localhost:5173 |
 | API docs (OpenAPI) | http://localhost:8000/docs |
 | Health check | http://localhost:8000/healthz |
+| Optional MLflow (`docker compose --profile ml up -d --build mlflow`) | http://localhost:5001 |
 
 **Demo sign-in (demo mode only).** One click per role, no password needed. If you prefer to type
 one, every demo account uses `Wathiq!Demo2026`.

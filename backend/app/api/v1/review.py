@@ -32,6 +32,7 @@ from app.db.enums import (
 )
 from app.process import engine_for_case
 from app.process.conductor_client import ConductorError
+from app.quality.service import capture_correction
 from app.schemas.case import ReviewTaskOut
 from app.schemas.common import Page
 from app.schemas.review import ReasonCode, ReviewDecisionRequest, ReviewTaskDetail
@@ -213,6 +214,7 @@ async def submit_decision(
         )
         field.corrected_value = correction.value
         field.status = FieldStatus.corrected
+        await capture_correction(db, task, field, correction.value)
 
     task.decision = payload.decision
     task.decision_reason_code = payload.reason_code

@@ -37,6 +37,14 @@ export function RunDrawer({
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : (
         <div className="space-y-4">
+          <p className="text-small text-ink-2">
+            {query.data.run.provenance.kind === "measured"
+              ? `${query.data.run.provenance.dataset} · ${query.data.run.provenance.sample_count} checks. ${query.data.run.provenance.scope}`
+              : "Illustrative seeded history. These scores were not measured."}
+          </p>
+          {query.data.run.provenance.sensitivity ? (
+            <p className="text-small text-ink-2">Prompt sensitivity: {query.data.run.provenance.sensitivity.reason}</p>
+          ) : null}
           <dl className="grid grid-cols-2 gap-3 rounded-[var(--radius)] border border-border bg-surface-2/50 p-3 sm:grid-cols-4">
             <div>
               <dt className="label-caption text-ink-2">Band</dt>
@@ -65,7 +73,7 @@ export function RunDrawer({
           ) : (
             <ul className="divide-y divide-border rounded-[var(--radius)] border border-border">
               {query.data.cases.map((testCase) => {
-                const passed = testCase.status === "passed";
+                const passed = testCase.passed;
                 return (
                   <li key={testCase.id} className="px-3 py-3">
                     <div className="flex items-start gap-2">
@@ -78,7 +86,7 @@ export function RunDrawer({
                         <p className="text-small font-medium text-ink">{testCase.name}</p>
                         <p className="mt-0.5 text-caption text-ink-2">{testCase.note}</p>
                       </div>
-                      <Badge tone={passed ? "success" : "danger"}>{testCase.status}</Badge>
+                      <Badge tone={passed ? "success" : "danger"}>{passed ? "passed" : "failed"}</Badge>
                     </div>
                     {!passed ? (
                       <dl className="mt-2 grid gap-2 sm:grid-cols-2">

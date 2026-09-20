@@ -2,13 +2,15 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M4 (process layer) is **complete and verified** on branch `m4-process-layer`.
-Orkes Conductor now runs the business process — intake, the agent task, a HUMAN task with an SLA
-timer beside it, idempotent posting and an audit seal — and an in-process engine walks the same
-steps when Conductor is switched off. The Conductor workflow id is the LangGraph thread id. 221
-backend tests, 26 MCP server tests and 30 Playwright tests pass; ruff, eslint and typecheck are
-clean; the whole stack starts from a wiped volume with the `process` profile on.
-**Next step:** M5 — Quality Lab + Prompt Studio.
+**Current status:** M5 demo implementation is built on `codex/m5-quality-lab` (based on M4 commit
+`463e086`). This milestone commit records the verified demo implementation. No M5 push has been made.
+235 backend tests passed in the full suite, plus the added Brier regression test (15 focused M5 tests).
+26 MCP tests and 33 Playwright tests pass; ruff, frontend lint, typecheck and production build are clean. The five-band
+CI gate passes locally and negative controls reject broken results. MLflow recorded a real fit on 93
+reviewed fields. Both incremental and fresh-database Alembic migrations passed.
+**Remaining:** push/PR approval. Gitleaks found no secrets; UI and Arabic PDF screenshots reviewed.
+**Explicit M6 dependency:** the prompt-sensitivity harness is implemented and tested, but the demo
+reader ignores wording. Live model sensitivity is unsupported, not scored as a success.
 
 ## Section 0 — Setup
 - [x] Environment checked (Windows 11, 16 GB RAM, Docker Desktop, Git, GitHub CLI)
@@ -67,7 +69,7 @@ clean; the whole stack starts from a wiped volume with the `process` profile on.
       the UI honestly says "no source region". Real coordinates arrive with Document
       Intelligence in M6. M3 did add the next best thing: each field now shows the signals its
       confidence was built from, including whether the value was found in the document at all.
-- [ ] Synthetic bilingual (Arabic) document generator — base-14 PDF fonts cannot encode Arabic;
+- [x] Synthetic bilingual (Arabic) document generator — base-14 PDF fonts cannot encode Arabic;
       moved to M5 with the golden dataset
 - [x] Milestone checks: clean `docker compose down -v` + `up --build`, all suites re-run
 - [x] Docs updated (ARCHITECTURE section 3 split into "runs today" vs "planned"; DECISIONS 27-33)
@@ -211,34 +213,46 @@ clean; the whole stack starts from a wiped volume with the `process` profile on.
   waits for that healthcheck, so it would have waited for ever.
 
 ## M5 — Quality Lab + Prompt Studio
-Scope agreed before starting, so a fresh session does not have to re-derive it.
 
-- [ ] **Golden dataset generator** — synthetic documents at known quality levels (clean, blurry,
-      cropped, wrong type, missing field) each with an answer key, so "is extraction still good?"
-      has a definite answer rather than an impression
-- [ ] **Bilingual (Arabic) document generator** — carried over from M2. Base-14 PDF fonts cannot
-      encode Arabic, so this needs an embedded font; it belongs with the golden set
-- [ ] **Regression cases from reviewer corrections** — every field a reviewer corrected becomes a
-      permanent test case. This is the loop that makes the system improve rather than just age
-- [ ] **Five test bands made real** (model, prompt, agent, AI security, adversarial) — the schema,
-      API and seeded results exist from M1; M5 makes them suites that run from the Quality Lab
-      screen *and* in CI
-- [ ] **Prompt Studio finished** — eval results linked to a prompt version, prompt *sensitivity*
-      testing (does rewording change the answer?) and correctness testing. The registry, semver
-      and approval flow are already done
-- [ ] **Calibration chart + MLflow** — MLflow as a new compose service behind the `ml` profile,
-      tracking each calibration fit as an experiment
-- [ ] **CI regression gate** — the piece that makes the rest matter: a pull request that makes
-      extraction worse fails
-- [ ] Milestone checks + docs + commit/PR
+- [x] Golden generator: 50 PDFs, five document types, clean/blurry/cropped/wrong-type/missing-field
+      conditions, independent answer keys, authenticated ZIP download
+- [x] Bilingual Arabic labels with an embedded shaped font; PDF rendered and visually checked.
+      Values are synthetic English strings. Blurry PDFs test abstention, not optical recognition.
+- [x] Reviewer corrections copied into permanent input/schema/answer snapshots and replayed in the
+      agent band; export to a checked-in JSON fixture lets CI use the same synthetic examples
+- [x] Five real diagnostic bands runnable from Quality Lab and CI; measured provenance and sample
+      counts, illustrative seed runs excluded from the summary, every band has a negative control
+- [x] Prompt-version diagnostics and history with body hash; evaluation does not approve a version
+- [~] Prompt sensitivity: harness compares wording variants and detects both unstable answers and
+      stable wrong answers. Live model experiments await Foundry in M6; demo mode explicitly says
+      unsupported, zero samples, no claimed robustness score
+- [x] Calibration Brier corrected to use individual outcomes, rejected cases excluded from positive
+      labels, chart marked as training diagnostics, every fit attempt persisted
+- [x] Optional MLflow service behind `ml`, non-root, persistent storage, port 5001; real fit tracked,
+      unavailable service leaves local fitting usable and reports tracking failure honestly
+- [x] CI gate rejects any failed diagnostic; negative-control command must exit 1; a separate test
+      breaks the actual extractor and proves the golden set detects it
+- [x] Verification: 235-test full backend run plus added Brier regression test; 15 focused M5 tests,
+      26 MCP and 33 Playwright tests pass; ruff/eslint/typecheck/production build clean
+- [x] Fresh and upgrade migrations verified without wiping the user's development database
+- [x] Documentation, clean full browser run (no retries), screenshot review and secret scan
+- [x] Milestone commit approved by the user
+- [ ] Push/PR approval
 
-**The risk to watch in this milestone.** M5 is where it is easiest to build something that *looks*
-like assurance and is not: an eval that cannot fail, a gate that never fires, a score computed over
-eight samples and presented as if it meant something. Every number this milestone produces needs to
-say how many samples it rests on, and every suite needs a case that is known to fail so we can see
-the gate work. The value here is in judgment, not in lines of code.
+Implementation and limits: [QUALITY.md](QUALITY.md). CI reads the committed correction export,
+not the developer's live database. No real customer data belongs in that export.
+
+### Bugs found while building M5
+- Arabic label normalisation deleted all Arabic letters, collapsing different labels into one key.
+  The extractor, repair worker and critic now preserve Unicode letters.
+- The results drawer read `status` although the API returns `passed`, displaying successes as failures.
+- The evaluation button returned a seeded run instead of running anything.
+- The displayed Brier score used squared chart-bin gaps instead of individual binary outcomes.
+- A refused refit left the old curve active in PostgreSQL while process memory said raw confidence.
+- The worker inherited an HTTP healthcheck although it is a queue-polling process with no HTTP server.
 
 ## M6 — Azure mode
+- [ ] Connect the sensitivity harness to Foundry and run actual prompt-wording experiments
 - [ ] Foundry / Document Intelligence / Content Safety / AI Search / ADLS / Azure ML / Monitor
 - [ ] Entra ID (MSAL) auth
 - [ ] Bicep + Helm + teardown script
@@ -265,11 +279,11 @@ the gate work. The value here is in judgment, not in lines of code.
 - [x] Pydantic validation (models built at runtime from the document type's schema; the same
       schema is the structured-output contract in M6)
 - [~] Prompt management with semver (registry, diffs, approval done; engine pinning in M2)
-- [ ] Prompt sensitivity + correctness testing
+- [~] Prompt correctness checks and sensitivity harness; live model sensitivity requires M6
 - [x] MCP servers: 4 servers, least privilege per node
 - [~] MCP servers extended for use case 2 (the same servers serve it; salary-specific tools in M7)
-- [~] Five test bands (schema, API and seeded results; real suites in M5)
-- [ ] Golden + regression datasets
+- [x] Five test bands (real API/CI suites with counts, provenance and negative controls)
+- [x] Golden + regression datasets
 - [x] HITL at mandatory and dynamic points (mandatory and dynamic review tasks both created)
 - [x] Conductor wait tasks (a WAIT task beside the human task, as the SLA timer)
 - [x] Checkpoint persistence and resumption (and crash recovery: redelivery under Conductor,

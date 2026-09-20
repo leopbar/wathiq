@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import calibration
 from app.db import models
-from app.db.enums import FieldStatus, ReviewStatus
+from app.db.enums import FieldStatus, ReviewDecision, ReviewStatus
+from app.quality.tracking import track_fit
 from app.rag import index as policy_index
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 async def collect_samples(db: AsyncSession) -> list[tuple[float, bool]]:
     """(raw confidence, was it right) for every field a human verified."""
     reviewed_cases = select(models.ReviewTask.case_id).where(
-        models.ReviewTask.status == ReviewStatus.completed
+        models.ReviewTask.status == ReviewStatus.completed,
+        models.ReviewTask.decision.in_([ReviewDecision.approve, ReviewDecision.correct]),
     )
     rows = (
         await db.execute(
@@ -57,6 +59,11 @@ async def load_active(db: AsyncSession) -> calibration.CalibrationCurve:
 
     if row is None:
         curve = calibration.CalibrationCurve()
+        attempt = (await db.execute(select(models.CalibrationExperiment).order_by(
+            models.CalibrationExperiment.created_at.desc()).limit(1))).scalar_one_or_none()
+        if attempt and not attempt.result.get("fitted"):
+            curve.sample_count = attempt.result.get("sample_count", 0)
+            curve.model_version = attempt.result.get("model_version", "")
     else:
         curve = calibration.CalibrationCurve(
             a=row.a,
@@ -82,12 +89,13 @@ async def refit(
     samples = await collect_samples(db)
     curve = calibration.fit(samples, model_version=model_version)
 
+    # A refused refit must not leave a previous curve active in the database while this
+    # process and its chart say raw. Persist every attempt, including refusals.
+    await db.execute(update(models.CalibrationCurve).values(is_active=False))
+    db.add(models.CalibrationExperiment(result=curve.as_dict(),
+                                        tracking=await track_fit(curve.as_dict())))
+
     if curve.fitted:
-        await db.execute(
-            update(models.CalibrationCurve)
-            .where(models.CalibrationCurve.is_active.is_(True))
-            .values(is_active=False)
-        )
         db.add(
             models.CalibrationCurve(
                 a=curve.a,

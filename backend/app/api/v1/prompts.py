@@ -17,13 +17,68 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import ADMIN_ONLY, CurrentUser, DbSession, client_ip, require_roles
 from app.core.errors import ConflictError, NotFoundError
 from app.db import models
-from app.db.enums import PromptStatus
+from app.db.enums import PromptStatus, QualityBand, Role
+from app.quality.service import evaluate
 from app.schemas.prompt import PromptDiff, PromptOut, PromptVersionOut
+from app.schemas.quality import QualityRunOut, RunBatch
 from app.services.events import record_user_event
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 AdminUser = Annotated[models.User, Depends(require_roles(*ADMIN_ONLY))]
+
+
+@router.post("/{key}/versions/{version}/evaluate", response_model=RunBatch)
+async def evaluate_version(
+    key: str,
+    version: str,
+    db: DbSession,
+    user: Annotated[
+        models.User, Depends(require_roles(Role.admin, Role.supervisor, Role.reviewer))
+    ],
+) -> RunBatch:
+    prompt = await _load_prompt(db, key)
+    target = next((v for v in prompt.versions if v.version == version), None)
+    if target is None:
+        raise NotFoundError("Prompt version")
+    runs = await evaluate(
+        db,
+        QualityBand.prompt,
+        actor=user.full_name,
+        prompt={
+            "key": key,
+            "version": version,
+            "body": target.body,
+            "document_type": prompt.document_type,
+        },
+    )
+    # This is a diagnostic score, not a language-model prompt-performance score.
+    target.eval_score = runs[0].score
+    await db.commit()
+    return RunBatch(runs=[QualityRunOut.model_validate(run) for run in runs])
+
+
+@router.get("/{key}/versions/{version}/evaluations", response_model=list[QualityRunOut])
+async def version_evaluations(
+    key: str, version: str, db: DbSession, _: CurrentUser
+) -> list[QualityRunOut]:
+    await _load_prompt(db, key)
+    rows = (
+        (
+            await db.execute(
+                select(models.QualityRun)
+                .where(
+                    models.QualityRun.provenance["prompt_key"].astext == key,
+                    models.QualityRun.provenance["prompt_version"].astext == version,
+                )
+                .order_by(models.QualityRun.started_at.desc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [QualityRunOut.model_validate(row) for row in rows]
 
 
 def _sort_key(version: str) -> tuple[int, ...]:
@@ -55,12 +110,16 @@ def _latest(prompt: models.Prompt) -> models.PromptVersion | None:
 @router.get("", response_model=list[PromptOut])
 async def list_prompts(db: DbSession, _: CurrentUser) -> list[PromptOut]:
     prompts = (
-        await db.execute(
-            select(models.Prompt)
-            .options(selectinload(models.Prompt.versions))
-            .order_by(models.Prompt.name)
+        (
+            await db.execute(
+                select(models.Prompt)
+                .options(selectinload(models.Prompt.versions))
+                .order_by(models.Prompt.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     out: list[PromptOut] = []
     for prompt in prompts:

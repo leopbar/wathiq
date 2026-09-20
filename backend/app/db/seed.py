@@ -173,7 +173,7 @@ async def seed_prompts(db: AsyncSession) -> None:
                     status=PromptStatus(version["status"]),
                     body=version["body"],
                     notes=version["notes"],
-                    eval_score=version.get("eval_score"),
+                    eval_score=None,
                     created_by=version.get("created_by", ""),
                     created_at=created,
                     approved_by=approved,
@@ -727,6 +727,8 @@ async def already_seeded(db: AsyncSession) -> bool:
 # alter one record — which is the thing the control exists to prevent. Wiping a demo database is
 # a visible, wholesale act; rewriting history is not.
 _CLEAR_TABLES = (
+    "regression_examples",
+    "calibration_experiments",
     "quality_cases",
     "quality_runs",
     "calibration_points",

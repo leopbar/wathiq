@@ -459,3 +459,32 @@ step checks for a checkpoint first and resumes from it instead.
 anyone who can reach it. Every task payload is the case id and nothing else; the worker reads what it
 needs from the database itself. A test asserts that no customer field and no document text appears
 anywhere in the workflow definition.
+
+### 58. Evaluation results must come from assertions that can fail
+M5 shares one runner between the API and CI. A document is one diagnostic observation; field
+counts are not presented as independent samples. Old seeded runs remain labelled illustrative and
+are excluded from the summary. Negative controls and a broken-extractor test prove rejection.
+
+### 59. Blurry demo PDFs test abstention, not imaginary OCR
+The generator rasterises and blurs real PDFs, without leaving hidden answers in a text layer.
+The offline reader returns no text. Arabic labels use an embedded, shaped font; English synthetic
+values remain the extraction contract. This is explicitly not an Arabic OCR accuracy claim.
+
+### 60. Prompt correctness and wording sensitivity are different claims
+The demo reader does not consume prompts, so identical outputs after rewording prove nothing.
+Prompt Studio records exact-version template/backend diagnostics; live sensitivity says unsupported.
+The sensitivity harness can catch unstable answers and stable-but-wrong answers in tests. A real
+Foundry predictor is required in M6 before publishing a wording-sensitivity score.
+
+### 61. Corrections preserve their input, and CI needs an explicit export
+Copy the schema, source text and expected answer during the review transaction, independently of
+later processing. Repeated task/field capture is deduplicated. Local replay reads the database;
+CI reads the reviewed synthetic export committed as quality/regressions.json. Raw customer data
+must never be promoted through this demo-only export path.
+
+### 62. Calibration metrics describe individual outcomes and their training scope
+Averaging chart-bin errors is not the Brier score. Compute it per reviewed field, exclude rejected
+cases from positive ground truth, and say these are training diagnostics. Record every refit
+attempt, even refusals, and keep database/memory activation consistent. MLflow receives aggregate
+metrics via REST; its absence never prevents fitting. It runs on loopback port 5001 under the ml
+profile so it does not compete with Conductor's UI port.

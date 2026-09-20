@@ -37,6 +37,7 @@ services:
       WATHIQ_DEMO_PASSWORD: ${WATHIQ_DEMO_PASSWORD:-Wathiq!Demo2026}
       WATHIQ_LOG_LEVEL: ${WATHIQ_LOG_LEVEL:-INFO}
       WATHIQ_BUILD_SHA: ${WATHIQ_BUILD_SHA:-dev}
+      WATHIQ_MLFLOW_TRACKING_URI: http://mlflow:5000
       WATHIQ_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       WATHIQ_STORAGE_DIR: /app/storage
       # Process layer. `auto` uses Conductor when it answers and the in-process engine when it
@@ -152,6 +153,9 @@ services:
       context: ./backend
       target: dev
     profiles: ["process"]
+    # This process polls queues and does not expose the API image's HTTP health endpoint.
+    healthcheck:
+      disable: true
     # Hot reload, like the API: `watchfiles` comes with uvicorn[standard] and restarts the
     # worker when a file under app/ changes. Without it a code change would silently keep
     # running the old steps, which is a confusing way to lose an afternoon.
@@ -215,7 +219,17 @@ services:
       - web
       - api
 
+  mlflow:
+    build: ./infra/mlflow
+    profiles: ["ml"]
+    ports:
+      - "127.0.0.1:5001:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+
 volumes:
   db-data:
   api-storage:
   e2e-report:
+  mlflow-data:

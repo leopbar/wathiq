@@ -1,5 +1,10 @@
 # Architecture
 
+M5 quality implementation: [QUALITY.md](QUALITY.md). The API and CI share five evaluation bands.
+Reviewer corrections become independent regression snapshots; prompt runs record body hashes.
+Calibration attempts are saved locally and optionally logged to MLflow behind the `ml` profile.
+The PDF generator embeds Arabic fonts; demo OCR uses pypdf and abstains on raster-only scans.
+
 Five pictures, each with a short explanation. The same diagrams are rendered live inside the app on
 the **About the system** screen (they come from `GET /api/v1/system/info`).
 
