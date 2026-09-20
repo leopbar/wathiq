@@ -28,11 +28,13 @@ test.describe("demo flow", () => {
 
   test("the dashboard shows real seeded numbers", async ({ page }) => {
     await signInAs(page, "Supervisor");
-    // The KPI row renders skeletons until its queries land. The endpoints answer in tens of
-    // milliseconds, but a cold sign-in plus the first render of five charts occasionally took
-    // longer than the default wait, so this one is given room rather than left to flake.
-    await expect(page.getByText("STRAIGHT-THROUGH")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("SLA BREACHES")).toBeVisible({ timeout: 30_000 });
+
+    // Scoped to the KPI landmark on purpose. "Straight-through" also appears in a chart legend
+    // and in a chart's description, so an unscoped match found three elements and failed the
+    // moment the charts finished rendering — which looked like a timing flake and was not one.
+    const kpis = page.getByRole("region", { name: "Key performance indicators" });
+    await expect(kpis.getByText("Straight-through", { exact: true })).toBeVisible();
+    await expect(kpis.getByText("SLA breaches", { exact: true })).toBeVisible();
 
     // At least the 30 seeded cases. Not an exact number: other tests create cases too.
     const total = page.getByText(/^\d+ total$/);

@@ -13,13 +13,20 @@ import { formatDuration, formatNumber, formatPercent, formatUsd } from "@/lib/fo
 import { StatCard } from "@/components/StatCard";
 import { StatCardSkeleton } from "@/components/Skeletons";
 
+/** The accessible name of the KPI block. A landmark for screen readers, and the anchor the
+ *  end-to-end tests use so "Straight-through" means the KPI card and not a chart legend. */
+export const KPI_REGION_LABEL = "Key performance indicators";
+
 export function KpiRowSkeleton() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section
+      aria-label={KPI_REGION_LABEL}
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    >
       {[0, 1, 2, 3, 4, 5, 6].map((i) => (
         <StatCardSkeleton key={i} />
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -106,7 +113,10 @@ export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undef
       : all;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section
+      aria-label={KPI_REGION_LABEL}
+      className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+    >
       {ordered.map((kpi) => (
         <StatCard
           key={kpi.key}
@@ -118,6 +128,6 @@ export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undef
           hint={kpi.hint}
         />
       ))}
-    </div>
+    </section>
   );
 }
