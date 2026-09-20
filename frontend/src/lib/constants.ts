@@ -94,14 +94,21 @@ export const DECISION_LABEL: Record<ReviewDecision, string> = {
   escalate: "Escalate",
 };
 
+/**
+ * The steps of the real graph, in order. Mirrors `STEPS` in `app/services/progress.py` on the
+ * backend, which is what turns event-log rows into the frames this list renders.
+ *
+ * Guardrails are not here yet: they are built in M3, and a step that never lights up reads as
+ * a broken pipeline rather than an honest "not built".
+ */
 export const PIPELINE_NODES = [
   { key: "intake", label: "Intake", description: "Documents received and stored" },
-  { key: "guardrails", label: "Guardrails", description: "Injection shield, PII, content safety" },
-  { key: "classify", label: "Classify", description: "Supervisor routes each document" },
-  { key: "extract", label: "Extract", description: "Workers pull structured fields" },
-  { key: "validate", label: "Validate", description: "Cross-field rules and calibration" },
-  { key: "review_gate", label: "Review gate", description: "Human-in-the-loop interrupt check" },
-  { key: "finalize", label: "Finalize", description: "Post to core banking and audit" },
+  { key: "ocr", label: "Read text", description: "Text pulled out of each document" },
+  { key: "classify", label: "Classify", description: "Decide what each document is" },
+  { key: "extract", label: "Extract", description: "Pull the schema's fields out" },
+  { key: "validate", label: "Validate", description: "Cross-field rules and confidence" },
+  { key: "review_gate", label: "Review gate", description: "Human-in-the-loop interrupt" },
+  { key: "finalize", label: "Finalize", description: "Close the case and audit" },
 ] as const;
 
 export const ACCEPTED_MIME = [

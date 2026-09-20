@@ -40,6 +40,7 @@ export function PipelineProgress({
   const percent = latest?.percent ?? 0;
 
   const steps = useMemo<StepperStep[]>(() => {
+    // Keep the LAST frame per node: a step can report "running" then "done".
     const seen = new Map<string, CaseProgressEvent>();
     for (const event of events) seen.set(event.node, event);
     const activeIndex = PIPELINE_NODES.findIndex((node) => node.key === latest?.node);
@@ -49,9 +50,14 @@ export function PipelineProgress({
       let state: StepperStep["state"] = "pending";
       if (event) {
         if (event.status === "failed") state = "failed";
+        // "waiting" means the graph is parked at the review gate for a person. It stays
+        // waiting even after the stream closes, because nothing will move until they answer.
+        else if (event.status === "waiting") state = "waiting";
+        else if (event.status === "done") state = "done";
         else if (activeIndex === index && phase === "streaming") state = "active";
         else state = "done";
       } else if (activeIndex >= 0 && index < activeIndex) {
+        // Earlier steps must already have run for a later one to be reporting.
         state = "done";
       }
       return {
@@ -63,6 +69,8 @@ export function PipelineProgress({
       };
     });
   }, [events, latest, phase]);
+
+  const parked = steps.some((step) => step.state === "waiting");
 
   return (
     <Card className="overflow-hidden">
@@ -97,10 +105,16 @@ export function PipelineProgress({
           </p>
         ) : null}
 
+        {phase === "ended" && parked ? (
+          <p className="rounded-[var(--radius)] border border-warning/30 bg-warning-soft px-3 py-2 text-small text-warning">
+            The pipeline paused at the review gate and is waiting for a reviewer. Its state is
+            checkpointed, so it resumes from this exact point once someone decides.
+          </p>
+        ) : null}
+
         {phase === "ended" && events.length === 0 ? (
           <p className="rounded-[var(--radius)] border border-border bg-surface-2 px-3 py-2 text-small text-ink-2">
-            The stream closed without progress frames. In M1 the backend emits a heartbeat and
-            closes; the full node-by-node stream arrives with the pipeline in M2.
+            The stream closed without any progress frames. Open the case to see where it got to.
           </p>
         ) : null}
 

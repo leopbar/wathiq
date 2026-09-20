@@ -61,6 +61,40 @@ flowchart TB
 
 ## 3. The agent graph
 
+### What runs today (M2)
+
+```mermaid
+stateDiagram-v2
+    [*] --> ocr
+    ocr --> classify
+    classify --> extract
+    extract --> validate
+    validate --> review_gate: something needs a human
+    validate --> finalize: confident enough
+    review_gate --> review_gate: interrupt() — waits for a reviewer
+    review_gate --> finalize: decision applied
+    finalize --> [*]
+```
+
+| Node | What it does |
+|---|---|
+| `ocr` | Reads the text out of each stored document. Demo mode reads the PDF text layer; an image gets an honest "cannot read this" rather than invented text. |
+| `classify` | Scores the text against keywords per document type and records the evidence, so a reviewer can see *why* it chose a type. Below a threshold it says `unknown` instead of guessing. |
+| `extract` | Pulls the fields the document type's schema asks for. A field the schema wants but the document does not contain comes back empty with confidence 0 — absent, never invented. |
+| `validate` | Runs the cross-field rules stored on the document type, and decides whether a human is needed: a critical rule failing, or low confidence on a critical field. |
+| `review_gate` | Calls `interrupt()`. The graph stops here and the state is checkpointed; it can wait hours. |
+| `finalize` | Closes the case out. Posting to core banking is wired in M4. |
+
+The only branch is after `validate`. If nothing needs a person the case goes straight to
+`finalize` — that is the "straight-through" number on the dashboard.
+
+**The rule that matters:** a node that can interrupt must have no side effects above the
+`interrupt()` call, because the node re-runs from its first line when the graph resumes. The
+review-task rows are therefore created by the runner, outside the graph, which runs once per
+pause. See DECISIONS #29.
+
+### Where it is going (M3)
+
 ```mermaid
 stateDiagram-v2
     [*] --> supervisor
@@ -77,18 +111,20 @@ stateDiagram-v2
     finalize --> [*]
 ```
 
-| Node | Pattern | What it does |
+**This is the plan, not the code.** M3 replaces the single `extract` node with a supervisor and
+parallel workers, and adds the critic and the ReAct investigator.
+
+| Node | Pattern | What it will do |
 |---|---|---|
-| `supervisor` | supervisor-worker | Classifies each document and fans work out with the Send API — documents are processed in parallel, not one after another. |
+| `supervisor` | supervisor-worker | Classifies each document and fans work out with the Send API — documents processed in parallel, not one after another. |
 | `worker_extract` | self-reflection | Extracts fields as structured output. If Pydantic validation fails, it sees the error and tries again, at most twice, then gives up honestly. |
 | `critic` | actor-critic | A second opinion that challenges values not supported by the quoted source text. Disagreement is a signal, not a failure. |
 | `investigator` | ReAct | Reason → act → observe, using MCP tools, to resolve a mismatch between documents. Has a strict step budget. |
-| `validator` | rules | Applies versioned cross-field rules from YAML, then calibrates confidence. |
-| `review_gate` | HITL | Calls `interrupt()` at mandatory points (possible sanctions match, expired document, first cases of a new type) and dynamic points (low confidence on a critical field, critic disagreement, suspected injection). |
-| `finalize` | — | Writes results and hands control back to Conductor. |
+| `validator` | rules | Versioned cross-field rules from YAML, then calibrated confidence. |
+| `review_gate` | HITL | Interrupts at mandatory points (possible sanctions match, expired document, first cases of a new type) and dynamic points (low confidence on a critical field, critic disagreement, suspected injection). |
 
-**The rule that matters:** nodes before `interrupt()` must have no side effects, because the node
-re-runs when the graph resumes. Anything that writes goes *after* the gate.
+The About screen in the running app draws the **live** graph from the code, so it can never
+describe a pipeline that is not there.
 
 ---
 

@@ -46,6 +46,14 @@ export default function CaseDetail() {
     queryKey: qk.caseDetail(id),
     queryFn: () => apiFetch<CaseDetailType>(`/cases/${id}`),
     enabled: Boolean(id),
+    // A case opened while the pipeline is still running would otherwise sit on a stale
+    // "Processing" until the user reloaded. Poll only while it is actually moving; once it
+    // settles (or parks at the review gate) nothing changes without a user action, so the
+    // polling stops and the page costs nothing.
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      return status === "intake" || status === "processing" ? 1_000 : false;
+    },
   });
 
   const caseData = query.data;

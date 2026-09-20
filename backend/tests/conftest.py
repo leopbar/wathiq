@@ -13,11 +13,13 @@ import psycopg
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.agent import runner
 from app.core.config import settings
 from app.db.base import Base
 from app.db.seed import seed
 from app.db.session import SessionLocal, engine
 from app.main import app
+from app.services import pipeline
 
 
 def _ensure_test_database() -> None:
@@ -79,6 +81,20 @@ async def auth(client: AsyncClient):
         return {"Authorization": f"Bearer {await _token(client, role)}"}
 
     return _headers
+
+
+@pytest.fixture(autouse=True)
+async def reset_pipeline_state() -> AsyncIterator[None]:
+    """Give every test a clean checkpointer and no leftover background runs.
+
+    The checkpointer is a process-wide singleton, which is right for the app (one event loop
+    for the life of the process) but wrong for tests: pytest-asyncio gives each test a new
+    event loop, and a connection pool created on a closed loop fails with "the connection is
+    closed" the moment the next test uses it.
+    """
+    yield
+    await pipeline.drain(timeout=5.0)
+    await runner.close_checkpointer()
 
 
 @pytest.fixture

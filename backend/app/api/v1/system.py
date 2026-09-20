@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app.agent import graph
 from app.core.config import settings
 from app.core.deps import DbSession
 from app.db.enums import IntegrationStatus
@@ -62,10 +63,9 @@ async def system_info(db: DbSession) -> SystemInfo:
 
 @router.get("/graph", response_model=GraphDiagram)
 async def graph_diagram() -> GraphDiagram:
-    """The agent graph.
+    """The agent graph that actually runs.
 
-    M2 replaces this with LangGraph's own `draw_mermaid()` output so the picture can never
-    drift from the code. Until then it is the planned design, labelled as such.
+    Drawn from the graph module that the pipeline compiles, so the picture cannot describe a
+    graph we are not running. M3 adds the workers, the critic and the investigator to it.
     """
-    planned = next(d for d in diagrams() if d.key == "graph")
-    return GraphDiagram(mermaid=planned.mermaid, source="planned")
+    return GraphDiagram(mermaid=graph.mermaid(), source="live")

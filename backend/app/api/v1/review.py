@@ -28,7 +28,7 @@ from app.db.enums import (
 from app.schemas.case import ReviewTaskOut
 from app.schemas.common import Page
 from app.schemas.review import ReasonCode, ReviewDecisionRequest, ReviewTaskDetail
-from app.services import mappers
+from app.services import mappers, pipeline
 from app.services.catalog import DECISION_REASON_CODES
 from app.services.events import record_user_event
 
@@ -245,6 +245,15 @@ async def submit_decision(
         ip_address=client_ip(request),
     )
     await db.commit()
+
+    # Escalation keeps the graph parked at the review gate — a supervisor still has to answer.
+    # Every other decision resumes the graph from its checkpoint, applying the corrections.
+    if payload.decision != ReviewDecision.escalate:
+        pipeline.resume(
+            case.id,
+            payload.decision.value,
+            {c["field"]: c["to"] for c in corrections},
+        )
 
     task = await _task_with_case(db, task_id)
     open_findings = sum(1 for f in task.case.findings if f.status == FindingStatus.open)
