@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Wathiq — assurance-first intelligent document processing for banking operations."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Wathiq</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        const saved = localStorage.getItem("wathiq.theme");
+        const dark =
+          saved === "dark" ||
+          (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        const lang = localStorage.getItem("wathiq.lang") || "en";
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+      } catch (e) {
+        /* storage blocked — fall back to light LTR */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

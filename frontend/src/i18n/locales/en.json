@@ -1,0 +1,67 @@
+{
+  "brand": {
+    "name": "Wathiq",
+    "tagline": "Assurance-first document processing",
+    "promise": "Confident decisions on every document — with the evidence attached."
+  },
+  "nav": {
+    "groupWork": "Work",
+    "groupAssurance": "Assurance",
+    "groupSystem": "System",
+    "dashboard": "Dashboard",
+    "cases": "Cases",
+    "newCase": "New case",
+    "review": "Review queue",
+    "quality": "Quality Lab",
+    "prompts": "Prompt Studio",
+    "settings": "Settings",
+    "audit": "Audit log",
+    "about": "About the system"
+  },
+  "common": {
+    "search": "Search",
+    "searchPlaceholder": "Search cases, screens…",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "loading": "Loading",
+    "signOut": "Sign out",
+    "theme": "Theme",
+    "language": "Language",
+    "commandPalette": "Command palette",
+    "toggleSidebar": "Toggle sidebar",
+    "page": "Page",
+    "of": "of",
+    "next": "Next",
+    "previous": "Previous",
+    "noResults": "No results",
+    "copy": "Copy",
+    "copied": "Copied",
+    "all": "All",
+    "mine": "Mine",
+    "export": "Export CSV",
+    "filters": "Filters",
+    "clear": "Clear",
+    "apply": "Apply"
+  },
+  "states": {
+    "errorTitle": "Something went wrong",
+    "errorBody": "We could not load this data.",
+    "emptyTitle": "Nothing here yet",
+    "forbiddenTitle": "Not allowed for your role",
+    "notFoundTitle": "Page not found"
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Use your operations account to continue.",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "demoTitle": "Demo sign-in",
+    "demoSubtitle": "One click per role — synthetic accounts, synthetic data.",
+    "trust1": "Every extracted value carries its confidence and its source region.",
+    "trust2": "Humans review only what the system is genuinely unsure about.",
+    "trust3": "Every action is written to an append-only audit trail."
+  }
+}

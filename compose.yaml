@@ -1,0 +1,107 @@
+# Wathiq — local development stack.
+#   docker compose up --build            start everything (hot reload)
+#   docker compose --profile process up  also start Orkes Conductor (needs ~2 GB more RAM)
+#   docker compose --profile test run --rm e2e   run the Playwright end-to-end tests
+#
+# Production images are built from the same Dockerfiles: see compose.prod.yaml.
+
+name: wathiq
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wathiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wathiq}
+      POSTGRES_DB: ${POSTGRES_DB:-wathiq}
+    ports:
+      - "${DB_PORT:-55432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wathiq} -d ${POSTGRES_DB:-wathiq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      target: dev
+    environment:
+      WATHIQ_MODE: ${WATHIQ_MODE:-demo}
+      WATHIQ_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-wathiq}:${POSTGRES_PASSWORD:-wathiq}@db:5432/${POSTGRES_DB:-wathiq}
+      WATHIQ_JWT_SECRET: ${WATHIQ_JWT_SECRET:-dev-only-insecure-secret-change-me}
+      WATHIQ_DEMO_PASSWORD: ${WATHIQ_DEMO_PASSWORD:-Wathiq!Demo2026}
+      WATHIQ_LOG_LEVEL: ${WATHIQ_LOG_LEVEL:-INFO}
+      WATHIQ_BUILD_SHA: ${WATHIQ_BUILD_SHA:-dev}
+      WATHIQ_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      WATHIQ_STORAGE_DIR: /app/storage
+      # Azure mode only — read from .env when present, harmless in demo mode.
+      WATHIQ_AZURE_OPENAI_ENDPOINT: ${WATHIQ_AZURE_OPENAI_ENDPOINT:-}
+      WATHIQ_AZURE_OPENAI_DEPLOYMENT: ${WATHIQ_AZURE_OPENAI_DEPLOYMENT:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - api-storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_API_PROXY: http://api:8000
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # ---- heavy, opt-in ------------------------------------------------------
+  conductor:
+    image: conductoross/conductor-standalone:3.15.0
+    profiles: ["process"]
+    ports:
+      - "${CONDUCTOR_PORT:-8080}:8080"
+      - "${CONDUCTOR_UI_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  e2e:
+    build:
+      context: ./e2e
+    profiles: ["test"]
+    environment:
+      E2E_BASE_URL: http://web:5173
+      E2E_API_URL: http://api:8000
+    volumes:
+      - ./e2e/tests:/e2e/tests
+      - ./e2e/playwright.config.ts:/e2e/playwright.config.ts
+      - e2e-report:/e2e/playwright-report
+    depends_on:
+      - web
+      - api
+
+volumes:
+  db-data:
+  api-storage:
+  e2e-report:

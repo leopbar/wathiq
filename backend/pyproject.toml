@@ -1,0 +1,58 @@
+[project]
+name = "wathiq-api"
+version = "0.1.0"
+description = "Wathiq — assurance-first intelligent document processing API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.118",
+    "uvicorn[standard]>=0.37",
+    "pydantic>=2.11",
+    "pydantic-settings>=2.10",
+    "sqlalchemy[asyncio]>=2.0.43",
+    "psycopg[binary,pool]>=3.2",
+    "greenlet>=3.1",
+    "alembic>=1.16",
+    "pyjwt>=2.10",
+    "bcrypt>=4.2",
+    "python-multipart>=0.0.20",
+    "sse-starlette>=2.1",
+    "pyyaml>=6.0",
+    "httpx>=0.28",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.13",
+    "anyio>=4.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "ASYNC", "RUF"]
+ignore = ["B008"]  # FastAPI dependency injection uses calls in defaults
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+# Arabic names make these table rows long; splitting them would hurt readability.
+"app/db/seed_data.py" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

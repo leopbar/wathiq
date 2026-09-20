@@ -1,0 +1,56 @@
+# --- secrets (never commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+secrets/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- node ---
+node_modules/
+frontend/dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# --- playwright ---
+e2e/playwright-report/
+e2e/test-results/
+e2e/.auth/
+
+# --- local data / uploads (synthetic, still not committed) ---
+backend/storage/
+storage/
+*.sqlite3
+
+# --- tooling / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# --- claude code local settings (shared settings.json IS committed) ---
+.claude/settings.local.json
+
+# --- private working documents (kept locally, never published) ---
+# The original brief and the assistant working instructions are personal notes,
+# not part of the product.
+docs/SPEC.md
+CLAUDE.md
