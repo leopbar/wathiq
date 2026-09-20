@@ -50,6 +50,18 @@ class Settings(BaseSettings):
     storage_dir: str = "/app/storage"
     max_upload_mb: int = 25
 
+    # --- MCP tool servers ------------------------------------------------
+    # Each node of the graph is given only the servers it needs (least privilege). An empty
+    # URL means "this server is not configured", and the agent says so rather than pretending
+    # the check was done.
+    mcp_document_store_url: str = ""
+    mcp_company_registry_url: str = ""
+    mcp_sanctions_url: str = ""
+    mcp_core_banking_url: str = ""
+    # A tool call that hangs must not hold a case open; the investigator records a timeout and
+    # hands the case to a person instead.
+    mcp_timeout_seconds: float = 8.0
+
     # --- SLA / business rules -------------------------------------------
     review_sla_hours: int = 4
     sla_at_risk_fraction: float = 0.25

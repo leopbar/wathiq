@@ -61,6 +61,9 @@ REVIEW_REASON_LABELS: dict[str, str] = {
     "CRITIC_DISAGREEMENT": "The critic disagreed with the extractor",
     "SUSPECTED_INJECTION": "Suspected prompt injection in the document",
     "CROSS_DOC_MISMATCH": "Values disagree across documents",
+    "UNSAFE_CONTENT": "Content safety flagged the upload — mandatory review",
+    "REGISTRY_STATUS_NOT_ACTIVE": "The registry says the company is not trading",
+    "INVESTIGATION_INCOMPLETE": "Not every external check could be completed",
 }
 
 DECISION_REASON_CODES: list[ReasonCode] = [

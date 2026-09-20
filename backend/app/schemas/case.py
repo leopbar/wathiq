@@ -45,6 +45,8 @@ class ExtractedFieldOut(Schema):
     page: int | None
     bbox: list[float] | None
     source_text: str | None
+    # What the confidence was built from: OCR quality, grounding, label match, shape, critic.
+    signals: list[dict[str, Any]] | None = None
 
 
 class FindingOut(Schema):
@@ -142,3 +144,26 @@ class CaseCreate(BaseModel):
 class CaseStartResponse(BaseModel):
     thread_id: str
     status: enums.CaseStatus
+
+
+class AssuranceOut(Schema):
+    """The evidence behind a case, read from the graph's own checkpoint.
+
+    `available` is false for a seeded demo case: it was written straight into the database and
+    never ran through the graph, so there is no checkpoint to read. Saying so is better than
+    showing an empty panel that looks like a failure.
+    """
+
+    available: bool
+    note: str = ""
+    thread_id: str = ""
+    guardrails: list[dict[str, Any]] = Field(default_factory=list)
+    worker_results: list[dict[str, Any]] = Field(default_factory=list)
+    critic_notes: list[dict[str, Any]] = Field(default_factory=list)
+    investigation: list[dict[str, Any]] = Field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    rule_packs: dict[str, str] = Field(default_factory=dict)
+    prompt_versions: dict[str, str] = Field(default_factory=dict)
+    calibration: dict[str, Any] = Field(default_factory=dict)
+    review_reasons: list[dict[str, str]] = Field(default_factory=list)

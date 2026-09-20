@@ -20,6 +20,8 @@ dependencies = [
     "httpx>=0.28",
     "langgraph>=0.6",
     "langgraph-checkpoint-postgres>=2.0",
+    "mcp>=2.2",
+    "pgvector>=0.3",
 ]
 
 [dependency-groups]

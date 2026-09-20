@@ -1,0 +1,37 @@
+id: passport
+version: 1.1.0
+title: Passport
+applies_to: [passport]
+description: Checks the passport bio page of a signatory or shareholder.
+rules:
+  - id: PP_NOT_EXPIRED
+    expr: "expiry_date > today"
+    severity: critical
+    message: Passport is expired
+    policy: KYC-POL-003 §2.1
+    explain: An expired passport cannot support a KYC refresh.
+
+  - id: PP_SIX_MONTH_VALIDITY
+    expr: "expiry_date > today + 6 months"
+    # An already-expired passport is PP_NOT_EXPIRED's business, not this rule's.
+    when: "expiry_date > today"
+    severity: warning
+    message: Passport expires within six months
+    policy: KYC-POL-003 §2.3
+    explain: >-
+      Bank policy asks for at least six months of remaining validity, because a file refreshed
+      today should still be valid at the next review.
+
+  - id: PP_ISSUE_BEFORE_EXPIRY
+    expr: "issue_date < expiry_date"
+    severity: warning
+    message: Issue date is not before the expiry date
+    policy: KYC-POL-003 §2.2
+    explain: Catches the two date fields being read the wrong way round.
+
+  - id: PP_NUMBER_PRESENT
+    expr: "passport_number is present"
+    severity: critical
+    message: Passport number is missing
+    policy: KYC-POL-003 §1.1
+    explain: Without the number the document cannot be tied to anything else in the file.

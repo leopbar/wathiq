@@ -92,6 +92,9 @@ interface ExtractedField {
   page: number | null;
   bbox: [number, number, number, number] | null;  // normalised x,y,w,h in 0..1
   source_text: string | null;              // grounding snippet
+  // What the confidence was built from (M3). Null on cases seeded before it existed.
+  signals: { key: "ocr"|"grounded"|"label"|"shape"|"critic";
+             label: string; value: number; weight: number; detail: string }[] | null;
 }
 
 interface Finding {
@@ -157,7 +160,31 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
 | POST | `/cases/{id}/documents` | multipart `files[]` → `Document[]` |
 | POST | `/cases/{id}/start` | begins the pipeline → `{thread_id, status}` |
 | GET | `/cases/{id}/events` | **SSE** stream, `event: progress` with `{node, status, message, percent, timeline_event?}` (M2; in M1 it emits a heartbeat then `event: done`) |
+| GET | `/cases/{id}/assurance` | the evidence behind the case, read from the agent's checkpoint (M3) |
 | GET | `/documents/{id}/file` | raw PDF/PNG bytes |
+
+`GET /cases/{id}/assurance` →
+```ts
+{ available: boolean;   // false for a seeded case that never ran through the graph
+  note: string;         // says why, when available is false
+  thread_id: string;
+  guardrails: { document_id; filename; blocked; sanitised; pii_counts: Record<string, number>;
+                injection: { attacked; risk; engine; signals: {kind; pattern; excerpt}[] };
+                safety: { flagged; severities: Record<string, number>; matches: string[] } }[];
+  worker_results: { document_id; filename; doc_type; field_count; attempts; validated;
+                    duration_ms; model_version; prompt_version;
+                    repairs: {field; pass; strategy; error; explanation; before; after}[];
+                    examples: {id; doc_type; note; similarity}[] }[];
+  critic_notes: { field; agreed; reason; via; suggested_value }[];
+  investigation: { index; thought; action; action_input; observation; ok; duration_ms }[];
+  tool_calls: { server; tool; arguments; ok; duration_ms; result; error }[];
+  plan: { document_id; filename; doc_type; classification_confidence; evidence: string[];
+          field_count; dispatched; skipped_because; prompt_version }[];
+  rule_packs: Record<string, string>;      // doc type -> "trade_license@1.2.0"
+  prompt_versions: Record<string, string>;
+  calibration: CalibrationCurve;
+  review_reasons: { code; label }[]; }
+```
 
 ### Review
 | Method | Path | Notes |
@@ -188,7 +215,17 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
 `GET /quality/summary` → `{ bands: { band: string; label: string; passed: number; failed: number; total: number; score: number; last_run_at: string }[]; overall_score: number; }`
 `GET /quality/runs?band=` → `Page<{ id; band; started_at; finished_at; passed; failed; score; triggered_by; commit_sha }>`
 `GET /quality/runs/{id}` → `{ run, cases: { id; name; band; status:"passed"|"failed"; expected; actual; note }[] }`
-`GET /quality/calibration` → `{ points: { predicted: number; observed: number; n: number }[]; ece: number; brier: number }`
+`GET /quality/calibration` →
+```ts
+{ points: { predicted: number; observed: number; n: number }[];
+  ece: number; brier: number; model_version: string;
+  curve: { a; b; fitted: boolean; sample_count; brier_before; brier_after; improvement;
+           model_version };   // fitted=false means the product is showing raw scores
+  method: string; ground_truth: string; }
+```
+`POST /quality/calibration/refit` → the same shape. Fits the curve again on every field a reviewer
+has decided (accepted = the extractor was right, corrected = it was wrong). Refuses to fit on too
+little data, or when the fit would score worse than the raw numbers. Admin and supervisor only.
 `POST /quality/runs` → `{ band: QualityBand | "all" }` starts a run; `"all"` (the default) runs every
 band. M1 returns the most recent seeded run instead of starting a real evaluation.
 
@@ -204,6 +241,20 @@ band. M1 returns the most recent seeded run instead of starting a real evaluatio
 `GET /settings/integrations` → `{ key; name; category; status: IntegrationStatus; detail: string; docs_url?: string }[]`
 `GET /settings/users` → `User[]` (admin only)
 `GET /settings/mode` → `{ mode: "demo" | "azure"; version: string; features: Record<string, boolean> }` — **no auth required**
+`GET /settings/assurance` → how the agent assures its answers, generated from the running code:
+```ts
+{ guardrails: { key; name; purpose; implementation; azure }[];
+  confidence_signals: { key; label; weight }[];
+  tool_servers: { key; name; url_configured; can_write; tools: string[];
+                  used_by_nodes: string[] }[];     // the least-privilege matrix
+  rule_packs: { id; version; title; description; applies_to: string[]; source;
+                rules: { id; severity; message; policy; explain; expr; check }[] }[];
+  registered_checks: string[];
+  graph_steps: { key; label }[];
+  policy_documents: { name; sections: number }[];
+  embedder: string;
+  calibration: CalibrationCurve; }
+```
 
 ### Audit
 `GET /audit` → query `q, actor, action, case_id, date_from, date_to, page, size` → `Page<AuditEntry>`

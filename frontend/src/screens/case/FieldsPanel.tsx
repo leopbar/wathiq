@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { Tooltip } from "@/components/ui/tooltip";
+import { ConfidenceSignals } from "./ConfidenceSignals";
 
 const STATUS_TONE: Record<FieldStatus, "success" | "warning" | "info" | "danger"> = {
   auto_accepted: "success",
@@ -123,6 +124,13 @@ export function FieldsPanel({
                       )}
                       <code className="text-caption text-ink-2/80">{field.name}</code>
                     </div>
+
+                    {active && field.signals && field.signals.length > 0 ? (
+                      <div className="mt-3 border-t border-border pt-3">
+                        <p className="label-caption mb-1.5 text-ink-2">Why this confidence</p>
+                        <ConfidenceSignals signals={field.signals} />
+                      </div>
+                    ) : null}
                   </button>
                 </li>
               );

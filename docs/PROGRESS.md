@@ -2,11 +2,13 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M2 (Core pipeline) is **complete and verified**. A document uploaded through
-the UI is read, classified, extracted, validated and either completes on its own or stops at the
-review gate for a person; a reviewer's decision resumes the graph from its PostgreSQL checkpoint.
-86 backend tests and 17 Playwright tests pass; ruff and typecheck clean.
-**Next step:** M2 commit + PR (awaiting approval), then M3 — AI depth.
+**Current status:** M3 (AI depth) is **complete and verified**. The graph now runs guardrails, a
+supervisor that dispatches one worker per document in parallel, self-correcting extraction, an
+actor-critic challenge, a bounded ReAct investigator calling four MCP tool servers, and a
+validator using versioned YAML rules with retrieved policy citations and calibrated confidence.
+183 backend tests, 24 MCP server tests and 22 Playwright tests pass; ruff, eslint and typecheck
+are clean; the whole stack starts from a wiped volume.
+**Next step:** M4 — process layer (Conductor), on branch `m4-process-layer`.
 
 ## Section 0 — Setup
 - [x] Environment checked (Windows 11, 16 GB RAM, Docker Desktop, Git, GitHub CLI)
@@ -65,7 +67,9 @@ review gate for a person; a reviewer's decision resumes the graph from its Postg
       region". Real coordinates arrive with Document Intelligence in M3/M6.
 - [ ] Synthetic bilingual (Arabic) document generator — base-14 PDF fonts cannot encode Arabic;
       moved to M5 with the golden dataset
-- [ ] Milestone checks + docs + commit/PR
+- [x] Milestone checks: clean `docker compose down -v` + `up --build`, all suites re-run
+- [x] Docs updated (ARCHITECTURE section 3 split into "runs today" vs "planned"; DECISIONS 27-33)
+- [x] Commit `852bf97`, PR #1 merged into `main`, CI green
 
 ### Bugs found and fixed while building M2
 - Re-running the rules on resume recreated findings as `open`, silently undoing a reviewer's
@@ -82,16 +86,57 @@ review gate for a person; a reviewer's decision resumes the graph from its Postg
   stepper uses, so it cannot describe a pipeline we do not run.
 
 ## M3 — AI depth
-- [ ] Supervisor + parallel workers (Send API)
-- [ ] Self-correction (max 2 tries)
-- [ ] Critic (actor-critic)
-- [ ] ReAct investigator with MCP tools
-- [ ] 4 MCP servers, least privilege
-- [ ] YAML cross-field rules (versioned)
-- [ ] Confidence signals + calibration
-- [ ] Guardrails (prompt shield, PII, sanitiser, content safety)
-- [ ] RAG policy citations + few-shot selection
-- [ ] Milestone checks + docs + commit/PR
+- [x] Supervisor + parallel workers (Send API), one worker per document
+- [x] Self-correction on Pydantic validation errors (max 2 repairs, each one recorded)
+- [x] Critic (actor-critic): grounding, shape and wrong-label checks, via the document-store MCP
+      server where it is reachable
+- [x] ReAct investigator with MCP tools: screening every named party, reconciling names across
+      documents, bounded at 6 steps
+- [x] 4 MCP servers (official Python SDK 2.2, streamable HTTP), least privilege enforced twice:
+      by separate processes, and by an allowlist per graph node
+- [x] YAML rule packs, versioned per document type, with a named-check escape hatch and a
+      `when:` guard; the pack version that judged a case is recorded on the case
+- [x] Confidence from five signals + Platt calibration fitted on reviewer decisions, with a
+      guard that refuses a fit worse than doing nothing
+- [x] Guardrails: prompt shield, PII tokenisation, output sanitiser, content safety — all four
+      run before anything reads a document
+- [x] RAG over a synthetic policy pack in pgvector: real policy citations on findings, and
+      few-shot example selection for the extraction prompt
+- [x] Backend tests: 183 passing (was 86); MCP servers: 24 passing in their own suite
+- [x] Playwright: 22 passing (5 new, covering injection, the assurance panel, signals,
+      least privilege and calibration honesty)
+- [x] Case screen: an Assurance tab reading the agent's own checkpoint; per-field "why this
+      confidence" breakdown
+- [x] Settings: an Assurance tab generated from the running code (guardrails, signal weights,
+      tool servers, rule packs, policy corpus)
+- [x] Quality Lab: the calibration curve's state, its ground truth, and a "refit" action
+- [x] Milestone checks: clean `docker compose down -v` + `up --build`, every suite re-run
+- [x] Docs updated (ARCHITECTURE section 3 rewritten to the live graph, 4b added for RAG;
+      DECISIONS 34–45; GLOSSARY "Added in M3")
+
+### Bugs found and fixed while building M3
+- **The pipeline read the PII-tokenised copy of each document**, so every date arrived as
+  `<DOB_1>` and no date field extracted. The guardrails now produce two clearly named copies:
+  `clean_text` for the pipeline, `log_text` for logs. (DECISIONS #34)
+- **Every case stopped before its first node, silently.** Read-only API requests left
+  connections *idle in transaction*, which blocked the checkpointer's `CREATE INDEX
+  CONCURRENTLY` forever on a fresh database. Latent since M1; only visible once the volumes
+  were wiped. (DECISIONS #44)
+- **Calibration never turned on.** The gradient descent was under-converged, produced a curve
+  worse than the raw scores, and the "do no harm" guard correctly discarded it — so the symptom
+  was silence. (DECISIONS #35)
+- **A date repair could invent a value.** Searching the whole page for a date put the issue date
+  into the expiry field. Repairs now look only under the field's own label. (DECISIONS #42)
+- **The Assurance panel froze on a half-finished run**, showing "0 steps" for a run that did six,
+  because it fetched once on mount. It now follows the case and refetches when it settles.
+- **A licence that expired in 2019 also reported "expires within 30 days".** Rules can now carry
+  a `when:` guard so they only apply in the state they make sense in.
+- **The investigator raised a finding on every clean case** ("screening clear"), which teaches a
+  reviewer to ignore the findings panel. Positive results now go to the timeline, which is the
+  audit trail, and the panel keeps what needs attention.
+- **Name matching missed transliterations.** Token overlap scored "Youssef Karam" against
+  "Youssef Karem" at 0.33 and would have missed a real screening match; character similarity is
+  now combined with it.
 
 ## M4 — Process layer
 - [ ] Conductor workflow (HUMAN + WAIT tasks)
@@ -126,39 +171,41 @@ review gate for a person; a reviewer's decision resumes the graph from its Postg
 - [ ] Milestone checks + docs + commit/PR
 
 ## Job-description coverage (section 7)
-- [ ] LangGraph: supervisor-worker
-- [ ] LangGraph: self-reflection
-- [ ] LangGraph: actor-critic
-- [ ] LangGraph: ReAct
+- [x] LangGraph: supervisor-worker (Send API, one worker per document)
+- [x] LangGraph: self-reflection (repairs on Pydantic errors, capped at 2)
+- [x] LangGraph: actor-critic (independent grounding, shape and label checks)
+- [x] LangGraph: ReAct (bounded loop, MCP tools, thought/action/observation recorded)
 - [x] LangGraph: HITL interrupts
 - [x] LangGraph: TypedDict state
 - [x] LangGraph: conditional edges
 - [ ] Azure AI Foundry extraction with structured outputs
-- [~] Per-field confidence (real per-field scores from the extractor; calibration in M3)
-- [~] Pydantic validation (API layer done; model-output validation lands with the real model in M6)
+- [x] Per-field confidence from five signals, calibrated with Platt scaling on reviewer outcomes
+- [x] Pydantic validation (models built at runtime from the document type's schema; the same
+      schema is the structured-output contract in M6)
 - [~] Prompt management with semver (registry, diffs, approval done; engine pinning in M2)
 - [ ] Prompt sensitivity + correctness testing
-- [ ] MCP servers, extended for use case 2
+- [x] MCP servers: 4 servers, least privilege per node
+- [~] MCP servers extended for use case 2 (the same servers serve it; salary-specific tools in M7)
 - [~] Five test bands (schema, API and seeded results; real suites in M5)
 - [ ] Golden + regression datasets
 - [x] HITL at mandatory and dynamic points (mandatory and dynamic review tasks both created)
 - [ ] Conductor wait tasks
 - [x] Checkpoint persistence and resumption
-- [ ] Content Safety
-- [ ] PII tokenisation
-- [ ] Prompt shielding
-- [ ] Output sanitisation
-- [x] Cross-field validation (rules stored per document type; engine runs in M2)
+- [~] Content Safety (local term-list stand-in, clearly labelled; Azure service in M6)
+- [x] PII tokenisation (7 recognisers; only the tokenised copy may reach a log)
+- [x] Prompt shielding (instruction patterns, invisible characters, bidi overrides, encoded blobs)
+- [x] Output sanitisation (markup, scripts, control and bidi characters, length cap)
+- [x] Cross-field validation (versioned YAML rule packs, six expression shapes, named checks)
 - [ ] Orkes Conductor
 - [ ] Document Intelligence
-- [ ] RAG: chunking, vector indexing, Azure AI Search (pgvector extension enabled in M1)
+- [~] RAG: chunking and vector indexing in pgvector, citations live; Azure AI Search in M6
 - [ ] AKS
 - [ ] ADLS Gen2 (storage interface + local implementation done)
 - [ ] Azure ML
 - [ ] Azure Monitor
 - [x] Pydantic, FastAPI, TypeScript, REST APIs, JSON schema
 - [x] Git, CI/CD
-- [ ] Failure-mode analysis
+- [~] Failure-mode analysis (bugs and their causes recorded per milestone; the gallery is M7)
 
 Legend: `[x]` done · `[~]` partly done, finished in a later milestone · `[ ]` not started.
 

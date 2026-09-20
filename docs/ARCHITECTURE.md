@@ -61,14 +61,21 @@ flowchart TB
 
 ## 3. The agent graph
 
-### What runs today (M2)
+This is the graph that runs. The About screen in the running app draws it from the compiled
+graph object, so the picture cannot drift from the code.
 
 ```mermaid
 stateDiagram-v2
     [*] --> ocr
-    ocr --> classify
-    classify --> extract
-    extract --> validate
+    ocr --> guardrails: text read
+    guardrails --> supervisor: prompt shield, content safety, PII tokenised
+    supervisor --> extract_worker: Send() — one worker per document, in parallel
+    extract_worker --> extract_worker: self-correct on validation errors (max 2)
+    extract_worker --> critic: all workers finished
+    supervisor --> critic: nothing to extract
+    critic --> investigator: verdict on every field
+    investigator --> investigator: ReAct loop with MCP tools (max 6 steps)
+    investigator --> validate
     validate --> review_gate: something needs a human
     validate --> finalize: confident enough
     review_gate --> review_gate: interrupt() — waits for a reviewer
@@ -76,55 +83,66 @@ stateDiagram-v2
     finalize --> [*]
 ```
 
-| Node | What it does |
-|---|---|
-| `ocr` | Reads the text out of each stored document. Demo mode reads the PDF text layer; an image gets an honest "cannot read this" rather than invented text. |
-| `classify` | Scores the text against keywords per document type and records the evidence, so a reviewer can see *why* it chose a type. Below a threshold it says `unknown` instead of guessing. |
-| `extract` | Pulls the fields the document type's schema asks for. A field the schema wants but the document does not contain comes back empty with confidence 0 — absent, never invented. |
-| `validate` | Runs the cross-field rules stored on the document type, and decides whether a human is needed: a critical rule failing, or low confidence on a critical field. |
-| `review_gate` | Calls `interrupt()`. The graph stops here and the state is checkpointed; it can wait hours. |
-| `finalize` | Closes the case out. Posting to core banking is wired in M4. |
+| Node | Pattern | What it does |
+|---|---|---|
+| `ocr` | — | Reads the text out of each stored document. Demo mode reads the PDF text layer; an image gets an honest "cannot read this" rather than invented text. |
+| `guardrails` | AI security | Prompt shield, content safety and PII tokenisation, **before** anything reads the text as meaningful. Produces two copies: the cleaned text the pipeline reads, and a tokenised copy that is the only form allowed into a log. |
+| `supervisor` | supervisor-worker | Classifies each document, records the evidence for the choice, and fans work out with the Send API — one worker per document, running in the same superstep. |
+| `extract_worker` | self-reflection | Extracts the schema's fields, validates against a Pydantic model built from that schema, and repairs what fails: at most two passes, each recorded with what it tried and why. |
+| `critic` | actor-critic | An independent second read of every value: is it on the page, is it the right shape, is it under its own label. Where the document-store MCP server is reachable it asks the file, not the state. |
+| `investigator` | ReAct | Thought → action → observation, with MCP tools, for what the documents cannot answer: screening every named party, and settling a name that differs between two documents. At most six steps. |
+| `validate` | rules | Versioned YAML rule packs, policy quotes retrieved from the index, then calibration turns each raw score into a probability. |
+| `review_gate` | HITL | Calls `interrupt()`. The graph stops here and the state is checkpointed; it can wait hours. |
+| `finalize` | — | Closes the case out. Posting to core banking is wired in M4. |
 
-The only branch is after `validate`. If nothing needs a person the case goes straight to
-`finalize` — that is the "straight-through" number on the dashboard.
+Two branches, and they are the two decisions the system makes: `fan_out` after the supervisor
+(how many workers), and `needs_human` after validate (person or not). If nothing needs a person
+the case goes straight to `finalize` — that is the "straight-through" number on the dashboard.
 
 **The rule that matters:** a node that can interrupt must have no side effects above the
 `interrupt()` call, because the node re-runs from its first line when the graph resumes. The
 review-task rows are therefore created by the runner, outside the graph, which runs once per
 pause. See DECISIONS #29.
 
-### Where it is going (M3)
+### Why the state uses the reducers it does
 
-```mermaid
-stateDiagram-v2
-    [*] --> supervisor
-    supervisor --> worker_extract: Send() one per document
-    worker_extract --> worker_extract: self-correct (max 2)
-    worker_extract --> critic
-    critic --> investigator: disagreement
-    critic --> validator: agreement
-    investigator --> validator
-    validator --> review_gate
-    review_gate --> human_review: interrupt()
-    human_review --> validator: corrections applied
-    review_gate --> finalize: confident
-    finalize --> [*]
-```
+Parallel workers write to the state in the same superstep. A key whose reducer keeps the last
+write would lose all but one of them, so `findings`, `tool_calls`, `guardrails`, `critic_notes`
+and `investigation` all append. `fields` uses a merge-by-(document, name) reducer instead: the
+workers write disjoint fields, and the critic later writes revised copies of fields it has
+challenged, which must **replace** rather than duplicate.
 
-**This is the plan, not the code.** M3 replaces the single `extract` node with a supervisor and
-parallel workers, and adds the critic and the ReAct investigator.
+### When a human is asked
 
-| Node | Pattern | What it will do |
+| Point | Kind | Raised by |
 |---|---|---|
-| `supervisor` | supervisor-worker | Classifies each document and fans work out with the Send API — documents processed in parallel, not one after another. |
-| `worker_extract` | self-reflection | Extracts fields as structured output. If Pydantic validation fails, it sees the error and tries again, at most twice, then gives up honestly. |
-| `critic` | actor-critic | A second opinion that challenges values not supported by the quoted source text. Disagreement is a signal, not a failure. |
-| `investigator` | ReAct | Reason → act → observe, using MCP tools, to resolve a mismatch between documents. Has a strict step budget. |
-| `validator` | rules | Versioned cross-field rules from YAML, then calibrated confidence. |
-| `review_gate` | HITL | Interrupts at mandatory points (possible sanctions match, expired document, first cases of a new type) and dynamic points (low confidence on a critical field, critic disagreement, suspected injection). |
+| Possible sanctions match | mandatory | investigator |
+| Required document expired | mandatory | rule pack (critical severity) |
+| First cases of a new document type | mandatory | supervisor (unclassified document) |
+| Content safety flagged the upload | mandatory | guardrails |
+| Registry says the company is not trading | mandatory | investigator |
+| Low calibrated confidence on a critical field | dynamic | validate |
+| The critic disagreed about a critical field | dynamic | critic |
+| Suspected instructions hidden in a document | dynamic | guardrails |
+| Values disagree across documents | dynamic | rule pack / investigator |
+| Not every external check could be completed | dynamic | investigator |
 
-The About screen in the running app draws the **live** graph from the code, so it can never
-describe a pipeline that is not there.
+---
+
+### Tools and least privilege
+
+Four MCP servers, each its own process and its own container:
+
+| Server | Can write? | Tools | Which node may call it |
+|---|---|---|---|
+| document-store | no (volume mounted read-only) | `read_document`, `find_in_document`, `list_case_documents` | critic, investigator |
+| company-registry (simulated) | no | `lookup_by_license`, `search_by_name`, `reconcile_names` | investigator |
+| sanctions (simulated sample list) | no | `screen_name`, `describe_list` | investigator |
+| core-banking (simulated) | **yes** | `get_customer`, `post_kyc_refresh`, `get_posting` | post (M4) only |
+
+Two independent locks on the only server that can write: the investigator is never given its
+address, and the broker in the API refuses the call by name even if it were. The Settings screen
+shows this table from the running code.
 
 ---
 
@@ -145,9 +163,53 @@ flowchart LR
     PO --> AU["Append-only audit log"]
 ```
 
-Confidence is not the model's self-reported number alone. It is built from signals — OCR confidence,
-whether the value is grounded in the source text, whether validation rules passed, whether the critic
-agreed — and then **calibrated** against the golden set, so a stated 90% matches an observed 90%.
+Confidence is not the model's self-reported number alone. Each field's score is a weighted average
+of five signals, and every one of them is a fact about how the value was obtained:
+
+| Signal | Question it answers | Weight |
+|---|---|---|
+| `ocr` | How well was the page read at all? | 0.20 |
+| `grounded` | Does this exact value appear in the document text? | 0.25 |
+| `label` | Was it found next to its own label, or guessed from nearby text? | 0.15 |
+| `shape` | Does it look like what the schema asks for (date, number, list)? | 0.20 |
+| `critic` | Did the independent second read agree? | 0.20 |
+
+That weighted average is the **raw** score. It is then mapped through a **calibration** curve —
+Platt scaling, two parameters — fitted on what reviewers actually decided: a field they accepted
+was read correctly, a field they corrected was not. The result is the **calibrated** score, and it
+is the one the thresholds read, because it is the one that means "right about this often".
+
+Until enough reviewers have decided enough cases, the curve is not fitted and the product shows
+raw scores **labelled as raw**. An uncalibrated number dressed up as a calibrated one is the kind
+of dishonesty this whole system exists to avoid.
+
+---
+
+## 4b. Policy retrieval (RAG)
+
+Findings cite policy, and the citation is retrieved rather than written into the rule:
+
+1. Six synthetic policy documents live in `backend/app/rag/corpus/` as Markdown.
+2. They are chunked **one section per chunk**, because a section is the unit a rule cites.
+   Splitting by character count would produce citations like "characters 1200-1800", which is
+   useless to a reviewer, and would cut rules in half.
+3. Each chunk is embedded and stored in `policy_chunks` with pgvector — same database, no
+   separate vector service to run or explain.
+4. A rule that names its section (`KYC-POL-004 §3.2`) gets that exact section: a look-up, not a
+   search, so it cannot retrieve the wrong one. A finding with no citation gets the nearest
+   section by cosine distance, and anything with no good match gets **no quote at all** rather
+   than a misleading one.
+
+The demo embedder is a hashed lexical embedding: every word and word pair is hashed into one of
+256 buckets and the vector is normalised. It is honest about being lexical — it matches "expired
+trade licence" to a section about expired licences because the words overlap, and it does not
+know that "lapsed" means the same thing. Azure mode swaps in an Azure OpenAI embedding
+deployment behind the same interface; the chunking, the index and the citation stay identical.
+
+The same machinery picks **few-shot examples** for the extraction prompt: worked examples live
+in `backend/app/rag/examples/`, and the ones nearest the document being read are selected and
+recorded on the case. In demo mode the extractor makes no model call, so the selection is shown
+as "selected for the prompt" and nothing more is claimed for it.
 
 ---
 

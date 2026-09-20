@@ -15,8 +15,8 @@ from app.agent import runner
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.errors import register_error_handlers
-from app.db.session import engine
-from app.services import pipeline
+from app.db.session import SessionLocal, engine
+from app.services import assurance, pipeline
 
 logging.basicConfig(
     level=settings.log_level.upper(),
@@ -28,6 +28,32 @@ logger = logging.getLogger("wathiq")
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info("Wathiq API starting in %s mode (v%s)", settings.mode, settings.app_version)
+    # Two things the pipeline needs ready before the first case arrives: the policy index
+    # (built once, then reused) and the calibration curve (held in memory so scoring a field
+    # never touches the database). Neither is fatal if it fails — the pipeline degrades to
+    # "no citation" and "uncalibrated", and both say so rather than pretending.
+    try:
+        # The checkpointer creates its own tables and indexes the first time it is used. Doing
+        # that here, before the server accepts traffic, keeps schema creation out of the first
+        # case's critical path — and away from the open transactions that ordinary requests
+        # would otherwise be holding while `CREATE INDEX CONCURRENTLY` waits for them.
+        await runner.get_checkpointer()
+        logger.info("agent checkpointer ready")
+
+        async with SessionLocal() as db:
+            built = await assurance.ensure_policy_index(db)
+            if built:
+                logger.info("policy index built: %d chunk(s)", built)
+            curve = await assurance.load_active(db)
+            logger.info(
+                "confidence calibration: %s",
+                f"fitted on {curve.sample_count} reviewed field(s)"
+                if curve.fitted
+                else "not fitted yet — raw scores shown as raw",
+            )
+    except Exception:
+        logger.exception("startup preparation failed; continuing with degraded assurance")
+
     yield
     # Let in-flight pipeline runs finish before the pools close, so a case is never left
     # half-written when the container is asked to stop.

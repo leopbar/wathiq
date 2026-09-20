@@ -28,8 +28,13 @@ test.describe("demo flow", () => {
 
   test("the dashboard shows real seeded numbers", async ({ page }) => {
     await signInAs(page, "Supervisor");
-    await expect(page.getByText("STRAIGHT-THROUGH")).toBeVisible();
-    await expect(page.getByText("SLA BREACHES")).toBeVisible();
+
+    // Scoped to the KPI landmark on purpose. "Straight-through" also appears in a chart legend
+    // and in a chart's description, so an unscoped match found three elements and failed the
+    // moment the charts finished rendering — which looked like a timing flake and was not one.
+    const kpis = page.getByRole("region", { name: "Key performance indicators" });
+    await expect(kpis.getByText("Straight-through", { exact: true })).toBeVisible();
+    await expect(kpis.getByText("SLA breaches", { exact: true })).toBeVisible();
 
     // At least the 30 seeded cases. Not an exact number: other tests create cases too.
     const total = page.getByText(/^\d+ total$/);

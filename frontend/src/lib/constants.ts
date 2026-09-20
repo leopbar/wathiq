@@ -96,17 +96,45 @@ export const DECISION_LABEL: Record<ReviewDecision, string> = {
 
 /**
  * The steps of the real graph, in order. Mirrors `STEPS` in `app/services/progress.py` on the
- * backend, which is what turns event-log rows into the frames this list renders.
+ * backend, which is what turns event-log rows into the frames this list renders — and that
+ * list is itself built from the graph the pipeline compiles.
  *
- * Guardrails are not here yet: they are built in M3, and a step that never lights up reads as
- * a broken pipeline rather than an honest "not built".
+ * Nothing may be listed here that does not run: a step that never lights up reads as a broken
+ * pipeline rather than an honest "not built".
  */
 export const PIPELINE_NODES = [
   { key: "intake", label: "Intake", description: "Documents received and stored" },
   { key: "ocr", label: "Read text", description: "Text pulled out of each document" },
-  { key: "classify", label: "Classify", description: "Decide what each document is" },
-  { key: "extract", label: "Extract", description: "Pull the schema's fields out" },
-  { key: "validate", label: "Validate", description: "Cross-field rules and confidence" },
+  {
+    key: "guardrails",
+    label: "Guardrails",
+    description: "Prompt shield, content safety, PII tokenised for logs",
+  },
+  {
+    key: "supervisor",
+    label: "Classify and plan",
+    description: "Decide what each document is, then dispatch a worker for each",
+  },
+  {
+    key: "extract",
+    label: "Extract (parallel)",
+    description: "One worker per document, self-correcting on validation errors",
+  },
+  {
+    key: "critic",
+    label: "Critic",
+    description: "A second, independent read challenges every value",
+  },
+  {
+    key: "investigate",
+    label: "Investigate",
+    description: "Screening and registry checks, in a bounded ReAct loop",
+  },
+  {
+    key: "validate",
+    label: "Validate",
+    description: "Versioned rules, policy citations, calibrated confidence",
+  },
   { key: "review_gate", label: "Review gate", description: "Human-in-the-loop interrupt" },
   { key: "finalize", label: "Finalize", description: "Close the case and audit" },
 ] as const;

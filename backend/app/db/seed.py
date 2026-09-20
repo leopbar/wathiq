@@ -376,6 +376,11 @@ async def seed_cases(
                 # A doubtful case has one weak critical field — that is what triggers review.
                 high = confident or not critical or rng.random() > 0.6
                 raw = _confidence(high)
+                # A reviewer looked at this case and sometimes changed a value. Those
+                # corrections are the ground truth the confidence curve is fitted on
+                # (services/assurance.py), so the demo needs some — and they have to be
+                # realistic: a low score is corrected far more often than a high one.
+                corrected = reviewed_and_done and rng.random() < (0.45 if raw < 0.85 else 0.04)
                 db.add(
                     models.ExtractedField(
                         case_id=case.id,
@@ -384,10 +389,13 @@ async def seed_cases(
                         label_en=meta.get("label_en", field_name.replace("_", " ").title()),
                         label_ar=meta.get("label_ar", ""),
                         value=str(value),
+                        corrected_value=f"{value} (corrected)" if corrected else None,
                         confidence=raw,
                         calibrated_confidence=_calibrate(raw),
                         status=(
-                            FieldStatus.auto_accepted
+                            FieldStatus.corrected
+                            if corrected
+                            else FieldStatus.auto_accepted
                             if raw >= 0.9
                             else FieldStatus.needs_review
                         ),

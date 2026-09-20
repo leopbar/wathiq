@@ -1,0 +1,74 @@
+# Worked extraction examples for trade licences.
+#
+# Each one is a short synthetic document with the answer a correct extraction gives. They are
+# embedded and the nearest ones are selected for the prompt, so a free-zone licence gets
+# free-zone examples rather than mainland ones.
+#
+# Synthetic: invented companies, invented licence numbers.
+doc_type: trade_license
+examples:
+  - id: tl_mainland_clean
+    note: Mainland licence, clean scan, labels above values
+    text: |
+      TRADE LICENCE
+      Licence number
+      CN-1042288
+      Company name (EN)
+      Falcon Ridge Trading LLC
+      Licensing authority
+      Department of Economic Development
+      Legal form
+      Limited Liability Company
+      Issue date
+      2016-03-11
+      Expiry date
+      2027-03-10
+    expected:
+      license_number: CN-1042288
+      company_name_en: Falcon Ridge Trading LLC
+      licensing_authority: Department of Economic Development
+      legal_form: Limited Liability Company
+      issue_date: "2016-03-11"
+      expiry_date: "2027-03-10"
+
+  - id: tl_freezone_abbrev
+    note: Free-zone licence, legal form abbreviated FZ-LLC, dates in day/month/year
+    text: |
+      TRADE LICENCE (FREE ZONE)
+      Licence number
+      CN-2255019
+      Company name (EN)
+      Al Noor Logistics FZ-LLC
+      Licensing authority
+      Free Zone Authority
+      Business activity
+      Freight forwarding
+      Issue date
+      02/09/2018
+      Expiry date
+      01/09/2026
+    expected:
+      license_number: CN-2255019
+      company_name_en: Al Noor Logistics FZ-LLC
+      licensing_authority: Free Zone Authority
+      business_activity: Freight forwarding
+      issue_date: 02/09/2018
+      expiry_date: 01/09/2026
+
+  - id: tl_missing_activity
+    note: Business activity absent — the correct answer leaves it empty, never guesses
+    text: |
+      TRADE LICENCE
+      Licence number
+      CN-3390477
+      Company name (EN)
+      Dunes Technology Solutions
+      Legal form
+      Sole Establishment
+      Expiry date
+      2026-01-19
+    expected:
+      license_number: CN-3390477
+      company_name_en: Dunes Technology Solutions
+      legal_form: Sole Establishment
+      expiry_date: "2026-01-19"

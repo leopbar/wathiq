@@ -7,6 +7,7 @@ import { DocumentTypesTab } from "./settings/DocumentTypesTab";
 import { UsersTab } from "./settings/UsersTab";
 import { IntegrationsTab } from "./settings/IntegrationsTab";
 import { ModeTab } from "./settings/ModeTab";
+import { AssuranceTab } from "./settings/AssuranceTab";
 
 export default function Settings() {
   const { role } = useAuth();
@@ -24,6 +25,7 @@ export default function Settings() {
         items={[
           { value: "document-types", label: "Document types", content: <DocumentTypesTab /> },
           { value: "users", label: "Users", content: <UsersTab /> },
+          { value: "assurance", label: "Assurance", content: <AssuranceTab /> },
           { value: "integrations", label: "Integrations", content: <IntegrationsTab /> },
           { value: "mode", label: "Mode", content: <ModeTab /> },
         ]}

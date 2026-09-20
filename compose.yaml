@@ -39,6 +39,11 @@ services:
       WATHIQ_BUILD_SHA: ${WATHIQ_BUILD_SHA:-dev}
       WATHIQ_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       WATHIQ_STORAGE_DIR: /app/storage
+      # MCP tool servers. Each node of the graph is given only the ones it needs.
+      WATHIQ_MCP_DOCUMENT_STORE_URL: http://mcp-document-store:9101/mcp
+      WATHIQ_MCP_COMPANY_REGISTRY_URL: http://mcp-company-registry:9102/mcp
+      WATHIQ_MCP_SANCTIONS_URL: http://mcp-sanctions:9103/mcp
+      WATHIQ_MCP_CORE_BANKING_URL: http://mcp-core-banking:9104/mcp
       # Azure mode only — read from .env when present, harmless in demo mode.
       WATHIQ_AZURE_OPENAI_ENDPOINT: ${WATHIQ_AZURE_OPENAI_ENDPOINT:-}
       WATHIQ_AZURE_OPENAI_DEPLOYMENT: ${WATHIQ_AZURE_OPENAI_DEPLOYMENT:-}
@@ -54,6 +59,62 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+
+  # ---- MCP tool servers ---------------------------------------------------
+  # Four separate processes, not four functions in the API. That is what makes least
+  # privilege real: the investigator is handed the registry and the sanctions list, and has
+  # no address for core banking, which is the only server that can write anything.
+  mcp-document-store:
+    build:
+      context: ./mcp_servers
+    command: ["python", "-m", "wathiq_mcp.document_store"]
+    environment:
+      MCP_PORT: "9101"
+      MCP_ALLOWED_HOSTS: mcp-document-store,localhost,127.0.0.1
+      WATHIQ_STORAGE_DIR: /storage
+    volumes:
+      # Read-only on purpose: this server cannot alter a customer's document even if asked.
+      - api-storage:/storage:ro
+    restart: unless-stopped
+
+  mcp-company-registry:
+    build:
+      context: ./mcp_servers
+    command: ["python", "-m", "wathiq_mcp.company_registry"]
+    environment:
+      MCP_PORT: "9102"
+      MCP_ALLOWED_HOSTS: mcp-company-registry,localhost,127.0.0.1
+    restart: unless-stopped
+
+  mcp-sanctions:
+    build:
+      context: ./mcp_servers
+    command: ["python", "-m", "wathiq_mcp.sanctions"]
+    environment:
+      MCP_PORT: "9103"
+      MCP_ALLOWED_HOSTS: mcp-sanctions,localhost,127.0.0.1
+    restart: unless-stopped
+
+  mcp-core-banking:
+    build:
+      context: ./mcp_servers
+    command: ["python", "-m", "wathiq_mcp.core_banking"]
+    environment:
+      MCP_PORT: "9104"
+      MCP_ALLOWED_HOSTS: mcp-core-banking,localhost,127.0.0.1
+    restart: unless-stopped
+
+  # The MCP servers' own tests. They drive the servers in-process through the official MCP
+  # client, so no server has to be running for them to pass.
+  #   docker compose --profile test run --rm mcp-tests
+  mcp-tests:
+    build:
+      context: ./mcp_servers
+      target: dev
+    profiles: ["test"]
+    volumes:
+      - ./mcp_servers/tests:/app/tests
+      - ./mcp_servers/wathiq_mcp:/app/wathiq_mcp
 
   web:
     build:

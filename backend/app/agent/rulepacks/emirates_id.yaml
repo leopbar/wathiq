@@ -1,0 +1,40 @@
+id: emirates_id
+version: 1.1.0
+title: Emirates ID
+applies_to: [emirates_id]
+description: >-
+  Checks the national identity card of a signatory or shareholder: format, validity and
+  agreement with the passport.
+rules:
+  - id: EID_FORMAT
+    expr: "id_number matches 784-####-#######-#"
+    severity: critical
+    message: Emirates ID number is not in the expected format
+    policy: KYC-POL-002 §1.4
+    explain: >-
+      Every Emirates ID starts 784 (the UAE's country code) followed by the birth year, a
+      seven-digit serial and a check digit. A number that does not fit was misread or is not
+      an Emirates ID at all.
+
+  - id: EID_NOT_EXPIRED
+    expr: "expiry_date > today"
+    severity: critical
+    message: Emirates ID is expired
+    policy: KYC-POL-002 §1.6
+    explain: An expired identity document cannot support a KYC refresh.
+
+  - id: EID_BORN_BEFORE_ISSUE
+    expr: "date_of_birth < expiry_date"
+    severity: warning
+    message: Date of birth is not before the expiry date
+    policy: KYC-POL-002 §1.5
+    explain: A cheap sanity check that catches two date fields read the wrong way round.
+
+  - id: EID_NAME_MATCHES_PASSPORT
+    expr: "emirates_id.full_name_en ~= passport.full_name"
+    severity: warning
+    message: Name differs from the passport
+    policy: KYC-POL-006 §2.2
+    explain: >-
+      Arabic names are transliterated differently on different documents, so the comparison is
+      fuzzy. A genuine mismatch is a sanctions- and fraud-relevant signal, not a typo.

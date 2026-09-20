@@ -141,7 +141,17 @@ talk to **synthetic data** — no external system is contacted:
 - **Company registry** lookup
 - **Sanctions screening** (a small list of invented names — not a real sanctions source)
 
-All people, companies and identifiers in this repository are invented.
+Each of the three is a real MCP server in its own container, speaking the Model Context Protocol
+over streamable HTTP. A fourth, the **document store**, is not simulated: it serves the real
+uploaded files, with the storage volume mounted read-only and no tool that writes.
+
+Least privilege is enforced twice: the servers are separate processes, and each node of the agent
+graph carries an allowlist of the tool names it may call. Core banking is the only server that can
+write anything, and only the posting step may call it. The Settings screen shows that table,
+generated from the running code.
+
+All people, companies and identifiers in this repository are invented. The policy documents the
+findings cite are synthetic too, written for this demonstration.
 
 ---
 
@@ -208,6 +218,13 @@ docker compose run --rm --no-deps --entrypoint ruff api check .
 
 ```bash
 docker compose --profile test run --rm e2e
+```
+
+The MCP tool servers have their own suite. It drives each server in-process through the official
+MCP client, so nothing has to be listening for it to run:
+
+```bash
+docker compose --profile test run --rm mcp-tests
 ```
 
 Production-shaped stack (built images, nginx, no hot reload):

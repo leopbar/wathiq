@@ -21,12 +21,14 @@ from app.schemas.quality import (
     BandSummary,
     Calibration,
     CalibrationPointOut,
+    CurveOut,
     QualityCaseOut,
     QualityRunDetail,
     QualityRunOut,
     QualitySummary,
     RunRequest,
 )
+from app.services import assurance
 from app.services.catalog import BAND_LABELS
 
 router = APIRouter(prefix="/quality", tags=["quality"])
@@ -144,7 +146,27 @@ async def calibration(db: DbSession, _: CurrentUser) -> Calibration:
         ece=round(ece, 4),
         brier=round(brier, 4),
         model_version=points[0].model_version if points else "",
+        curve=CurveOut(**(await assurance.load_active(db)).as_dict()),
     )
+
+
+@router.post("/calibration/refit", response_model=Calibration)
+async def refit_calibration(
+    db: DbSession,
+    _: Annotated[models.User, Depends(require_roles(Role.admin, Role.supervisor))],
+) -> Calibration:
+    """Fit the confidence curve again on everything reviewers have decided so far.
+
+    The training examples are free and they grow every day: a field a reviewer accepted was
+    read correctly, a field they corrected was not. Refitting turns that into a better answer
+    to "how often is the extractor right when it says it is this sure".
+
+    If there is too little data, or the fit would be worse than doing nothing, the curve stays
+    unfitted and the scores stay raw — which the UI then says out loud.
+    """
+    await assurance.refit(db)
+    await db.commit()
+    return await calibration(db, _)
 
 
 @router.post("/runs", response_model=QualityRunOut)

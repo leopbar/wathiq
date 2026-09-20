@@ -5,23 +5,34 @@ The event log is the record of what happened, written in the language of the aud
 module is the one place that translates between the two, so the backend and the UI can never
 drift apart about what the steps are.
 
-The step list is the real graph in `app.agent.graph`. Guardrails are deliberately absent: they
-are built in M3, and showing a step that never runs would look like a bug.
+The step list comes from `app.agent.graph`, which is the graph the pipeline actually compiles.
+A step cannot appear here that does not run.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.agent.graph import STEP_LABELS
+
+# Where each step's bar sits when it finishes. Intake is not a graph node — it is the upload
+# and the queueing that happen before the graph starts — so it is prepended here.
+_COMPLETION: dict[str, int] = {
+    "intake": 8,
+    "ocr": 18,
+    "guardrails": 28,
+    "supervisor": 40,
+    "extract": 58,
+    "critic": 70,
+    "investigate": 80,
+    "validate": 90,
+    "review_gate": 96,
+    "finalize": 100,
+}
+
 # (key, label, percent when this step completes)
-STEPS: list[tuple[str, str, int]] = [
-    ("intake", "Intake", 10),
-    ("ocr", "Read text", 25),
-    ("classify", "Classify", 45),
-    ("extract", "Extract", 65),
-    ("validate", "Validate", 85),
-    ("review_gate", "Review gate", 95),
-    ("finalize", "Finalize", 100),
+STEPS: list[tuple[str, str, int]] = [("intake", "Intake", _COMPLETION["intake"])] + [
+    (key, label, _COMPLETION[key]) for key, label in STEP_LABELS
 ]
 
 _PERCENT = {key: percent for key, _label, percent in STEPS}
@@ -33,10 +44,15 @@ _ACTION_MAP: dict[str, tuple[str, str]] = {
     "case.started": ("intake", "running"),
     "pipeline.queued": ("intake", "done"),
     "agent.ocr": ("ocr", "done"),
-    "agent.classify": ("classify", "running"),
-    "agent.classify.done": ("classify", "done"),
+    "agent.guardrails.document": ("guardrails", "running"),
+    "agent.guardrails": ("guardrails", "done"),
+    "agent.classify": ("supervisor", "running"),
+    "agent.supervisor": ("supervisor", "done"),
     "agent.extract": ("extract", "running"),
     "agent.extract.done": ("extract", "done"),
+    "agent.critic": ("critic", "done"),
+    "agent.investigate.step": ("investigate", "running"),
+    "agent.investigate": ("investigate", "done"),
     "agent.finding": ("validate", "running"),
     "agent.validate": ("validate", "done"),
     "pipeline.paused": ("review_gate", "waiting"),
