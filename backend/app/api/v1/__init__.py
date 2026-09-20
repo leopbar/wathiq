@@ -8,6 +8,7 @@ from app.api.v1 import (
     cases,
     dashboard,
     documents,
+    process_api,
     prompts,
     quality,
     review,
@@ -24,6 +25,7 @@ api_router.include_router(dashboard.router)
 api_router.include_router(quality.router)
 api_router.include_router(prompts.router)
 api_router.include_router(settings_api.router)
+api_router.include_router(process_api.router)
 api_router.include_router(audit.router)
 api_router.include_router(system.router)
 

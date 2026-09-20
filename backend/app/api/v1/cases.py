@@ -24,7 +24,7 @@ from app.core.deps import (
     client_ip,
     require_roles,
 )
-from app.core.errors import NotFoundError, ValidationError
+from app.core.errors import NotFoundError, ServiceUnavailableError, ValidationError
 from app.db import models
 from app.db.enums import (
     ActorType,
@@ -34,6 +34,8 @@ from app.db.enums import (
     FindingStatus,
     Language,
 )
+from app.process import engine_for_case, engine_for_new_case
+from app.process.conductor_client import ConductorError
 from app.schemas.case import (
     AssuranceOut,
     CaseCreate,
@@ -43,7 +45,8 @@ from app.schemas.case import (
     DocumentOut,
 )
 from app.schemas.common import Page
-from app.services import mappers, pipeline, progress
+from app.schemas.process import PostingOut, ProcessStatusOut
+from app.services import mappers, posting, progress
 from app.services.events import record_event, record_user_event
 from app.services.sla import default_due_at
 from app.services.storage import get_storage
@@ -335,10 +338,21 @@ async def start_case(
     )
     await db.commit()
 
-    # Commit first, then launch: the background run opens its own session and must not race
-    # the transaction that set the case to `processing`.
-    pipeline.start(case.id)
-    return CaseStartResponse(thread_id=case.thread_id, status=case.status)
+    # Commit first, then hand the case to the process layer: the engine opens its own sessions
+    # and must not race the transaction that set the case to `processing`.
+    engine = await engine_for_new_case()
+    try:
+        workflow_id = await engine.start_case(case.id)
+    except ConductorError as exc:
+        # Only reachable with WATHIQ_PROCESS_ENGINE=conductor, which is a deliberate choice to
+        # fail rather than quietly run the process somewhere else.
+        raise ServiceUnavailableError(
+            "The process orchestrator is not available, so the case was not started. "
+            f"({exc})",
+            "CONDUCTOR_UNAVAILABLE",
+        ) from exc
+
+    return CaseStartResponse(thread_id=workflow_id, status=case.status)
 
 
 @router.get("/{case_id}/assurance", response_model=AssuranceOut)
@@ -382,6 +396,35 @@ async def case_assurance(case_id: UUID, db: DbSession, _: CurrentUser) -> Assura
     )
 
 
+@router.get("/{case_id}/process", response_model=ProcessStatusOut)
+async def case_process(case_id: UUID, db: DbSession, _: CurrentUser) -> ProcessStatusOut:
+    """Where this case is in the business process, and what was posted.
+
+    The steps come from the case's own append-only event log, so this view and the audit trail
+    cannot disagree. When Conductor ran the case and is reachable, its own view of the workflow
+    instance is included alongside — two independent records of the same run.
+    """
+    case = await _load_case(db, case_id)
+    engine = await engine_for_case(db, case)
+    status_out = await engine.status(case)
+    payload = status_out.as_dict()
+
+    record = await posting.for_case(db, case_id)
+    if record is not None:
+        payload["posting"] = PostingOut(
+            status=record.status.value,
+            reference=record.reference,
+            customer_id=record.customer_id,
+            approval_kind=record.approval_kind,
+            approved_by=record.approved_by,
+            duplicate=record.duplicate,
+            idempotency_key=record.idempotency_key,
+            note=record.note,
+            posted_at=record.posted_at.isoformat() if record.posted_at else None,
+        )
+    return ProcessStatusOut(**payload)
+
+
 @router.get("/{case_id}/events")
 async def case_events(
     case_id: UUID, request: Request, db: DbSession, _: BrowserUser
@@ -399,8 +442,16 @@ async def case_events(
     """
     case = await _load_case(db, case_id)
     known_seq = 0
-    # Anything other than these means the pipeline is no longer advancing on its own.
-    moving = {CaseStatus.intake, CaseStatus.processing}
+    # Anything other than these means the case is no longer advancing on its own. `approved`
+    # and `posting` are in the list because the process layer still has work to do after the
+    # graph finishes — closing the stream at `pipeline.completed` would cut the browser off
+    # just before the posting and audit steps it is waiting to see.
+    moving = {
+        CaseStatus.intake,
+        CaseStatus.processing,
+        CaseStatus.approved,
+        CaseStatus.posting,
+    }
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         nonlocal known_seq

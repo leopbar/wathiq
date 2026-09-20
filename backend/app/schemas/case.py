@@ -89,6 +89,9 @@ class ReviewTaskOut(Schema):
     assigned_to: UserRef | None
     sla_due_at: datetime | None
     sla_state: SlaState
+    # Set when the SLA timer found this review still open. The queue shows it, because a
+    # reviewer and a supervisor both need to know a case is already late.
+    escalated_at: datetime | None = None
     decision: enums.ReviewDecision | None
     decision_reason_code: str | None
     decision_note: str | None

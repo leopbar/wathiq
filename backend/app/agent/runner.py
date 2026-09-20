@@ -284,14 +284,18 @@ async def _apply_result(
         else:
             decision = result.get("decision")
             rejected = decision == ReviewDecision.reject.value
-            case.status = CaseStatus.rejected if rejected else CaseStatus.completed
+            # `approved`, not `completed`: the graph has finished thinking, but the business
+            # process has not finished with the case — it still has to be posted and sealed.
+            # The process layer's audit step is the only thing that writes `completed`.
+            case.status = CaseStatus.rejected if rejected else CaseStatus.approved
             case.straight_through = bool(result.get("straight_through"))
-            case.completed_at = datetime.now(UTC)
+            if rejected:
+                case.completed_at = datetime.now(UTC)
             await record_event(
                 db,
                 case_id=case.id,
                 action="pipeline.completed",
-                label=f"Pipeline finished: {case.status.value}",
+                label=f"Agent graph finished: {case.status.value}",
                 actor="system",
                 actor_type=ActorType.system,
                 detail={
@@ -375,6 +379,40 @@ async def resume_case(
     except Exception:
         logger.exception("Resume failed for case %s", case_id)
         await _fail(case_id, "The pipeline could not resume after review.")
+        return CaseStatus.failed.value
+
+    return await _apply_result(case_id, result, config, started)
+
+
+async def continue_case(case_id: UUID) -> str:
+    """Carry on a run that was interrupted by something other than a reviewer.
+
+    Used by crash recovery. `ainvoke(None, ...)` means "continue this thread from its last
+    checkpoint" — no input, so nothing is added to the state a second time. Re-running with
+    the initial state instead would append to every list the workers write, because those keys
+    use appending reducers.
+
+    A case parked at the review gate simply interrupts again, which is the correct outcome: it
+    is still waiting for a person.
+    """
+    started = datetime.now(UTC)
+    async with SessionLocal() as db:
+        case = await _load_case(db, case_id)
+        if case is None:
+            raise ValueError(f"Case {case_id} not found")
+        thread_id = case.thread_id
+
+    graph = await _compiled()
+    config = {"configurable": {"thread_id": thread_id}}
+    if not await has_checkpoint(thread_id):
+        # Nothing was saved, so there is nothing to continue from: start from the beginning.
+        return await start_case(case_id)
+
+    try:
+        result = await graph.ainvoke(None, config=config)
+    except Exception:
+        logger.exception("Could not continue case %s", case_id)
+        await _fail(case_id, "The pipeline could not continue after a restart.")
         return CaseStatus.failed.value
 
     return await _apply_result(case_id, result, config, started)

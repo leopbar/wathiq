@@ -34,19 +34,27 @@ permissions.
 
 ```mermaid
 flowchart TB
-    subgraph P["Process layer — Orkes Conductor"]
-        A["intake"] --> B["guardrails"] --> D["agent task"]
-        D --> E["HUMAN task + WAIT timer (SLA)"]
-        E --> F["post to core banking"] --> H["audit"]
+    subgraph P["Process layer — Orkes Conductor (workflow wathiq_kyc_refresh v1)"]
+        A["intake"] --> D["agent task"]
+        D --> SW{"does a human<br/>have to look?"}
+        SW -->|no| F
+        SW -->|yes| FK["fork"]
+        FK --> HU["HUMAN task"]
+        FK --> TI["WAIT — SLA timer"]
+        TI --> ES["escalate to a supervisor"]
+        HU --> JN["join on the review only"]
+        JN --> AP["apply the decision"] --> F
+        F["post to core banking<br/>idempotent, approved only"] --> H["seal the audit trail"]
     end
     subgraph AI["Reasoning layer — LangGraph (inside the agent task)"]
-        S["supervisor: classify"] --> WK["workers: extract (parallel)"]
+        G["guardrails"] --> S["supervisor: classify"] --> WK["workers: extract (parallel)"]
         WK --> CR["critic"] --> IN["ReAct investigator"]
         IN --> V["validator + calibration"] --> RG["review gate: interrupt()"]
         RG --> FIN["finalize"]
     end
-    D -.->|"workflow id == thread id"| S
-    RG -.->|"resume from checkpoint"| E
+    D -.->|"workflow id == thread id"| G
+    RG -.->|"interrupt: the graph parks"| HU
+    AP -.->|"resume from the checkpoint"| RG
 ```
 
 **This is the diagram to start from when explaining the system.**
@@ -55,7 +63,79 @@ flowchart TB
   act, and what to do when nobody does (escalate).
 - LangGraph is the *thinker*: given the documents, it works out what they say and how sure it is.
 - They meet at one identifier. `case.thread_id` is both the Conductor workflow ID and the LangGraph
-  thread ID, so a single search finds the business history *and* the reasoning history.
+  thread ID, so a single search finds the business history *and* the reasoning history. The intake
+  step is where that invariant is applied: it receives Conductor's own workflow id and writes it onto
+  the case before any step needs it.
+
+The workflow is declared once, in `backend/app/process/definition.py`, as plain data. The Conductor
+JSON, the step list the UI shows and the diagram on the About screen are all generated from it, and a
+test asserts that they describe the same steps — so the picture cannot drift from the process.
+
+---
+
+## 2b. The process layer in detail
+
+### Two engines, one set of steps
+
+| | Orkes Conductor | In-process engine |
+|---|---|---|
+| Who schedules the steps | Conductor, from its own queues | Python, in the API container |
+| Retries and redelivery | at-least-once, per the task definition | retried in-process; a crash is picked up at the next startup |
+| The SLA timer | a `WAIT` task per case | one sweep over the review queue every minute |
+| Needs | ~2 GB of RAM | nothing extra |
+
+Both call the **same functions** in `backend/app/process/tasks.py` and write the same entries to the
+same event log. The fallback is not a second implementation of the business process — it is the same
+steps with a different scheduler, which is why it can be trusted for a demo.
+
+`WATHIQ_PROCESS_ENGINE` chooses: `conductor` (fail if it is not there), `inprocess`, or `auto` (the
+default: Conductor when it answers, the fallback when it does not). **Every case records which engine
+ran it**, so a case processed by the fallback can never be mistaken for one that went through
+Conductor — and a decision is always handed back to the engine that started that case, never to
+whichever one is configured today.
+
+### The human step, and the timer beside it
+
+The review and its SLA timer run as two branches of a fork, and the join waits for **the review
+alone**. That one line is the whole design: a timer that fired must never finish a case on a person's
+behalf. When it fires, it escalates — the review moves to the supervisor queue and the case priority
+is raised — and the case still needs a human answer.
+
+A review somebody has already claimed stays with them. Taking a half-made decision away from a person
+produces a worse outcome than a late case.
+
+### Posting: the only step that writes outside Wathiq
+
+Three rules, each enforced rather than promised:
+
+1. **Only after an approval.** Either a named reviewer approved it, or the straight-through policy
+   did — and the posting records *which*, so a record never says a human approved something no human
+   saw. The simulated core banking server refuses a post that names no approver or an approval kind
+   it does not recognise.
+2. **Exactly once.** The idempotency key is derived from the workflow instance
+   (`<workflow id>:kyc_refresh:1`), so the same case always produces the same key. It is honoured in
+   two independent places: a `UNIQUE` column in our database and the system of record's own key
+   table. A redelivered task, a worker that died between the call and the commit, and two workers
+   racing all end with one posting.
+3. **Never silently skipped.** A case that is not posted gets a row saying why — rejected, no
+   matching customer, or the server not configured. "Nothing was posted" is an audit answer.
+
+### Crash recovery
+
+Under Conductor there is nothing to write: a task whose worker stops answering is redelivered after
+its response timeout. The agent step is safe to redeliver because it *continues* the graph from its
+checkpoint rather than starting it again — restarting would feed the initial state in a second time,
+and the keys the parallel workers write use appending reducers, so every list would gain a duplicate.
+
+The fallback has to answer for this itself, so at startup it looks for cases left in `processing`,
+`approved` or `posting`, records that it found them, and carries them on.
+
+### The audit trail is append-only, and the database enforces it
+
+Until M4 the `events` table was append-only by convention: nothing in the code updated or deleted a
+row. Convention is not a control. A trigger now raises on every `UPDATE` and `DELETE` against it, so
+the application cannot rewrite history even by accident, and `GET /process/audit-integrity` reports
+whether the trigger is in place — along with what the check does *not* prove.
 
 ---
 
@@ -227,15 +307,20 @@ flowchart TB
     end
     web --> api
     api --> db
-    api --> conductor
-    conductor --> worker
-    worker --> api
+    api -->|"start workflow,<br/>complete the human task"| conductor
+    worker -->|"poll for tasks"| conductor
+    worker --> db
+    worker --> mcp
     api --> mcp
 ```
 
+The `worker` service runs **the same image as the API**, started as a task worker instead of a web
+server. That is deliberate: the worker runs the LangGraph graph, so two images would mean two
+versions of the reasoning — the last thing an auditable system should have.
+
 Every service has a multi-stage Dockerfile, runs as a non-root user and has a healthcheck. Heavy
-services (`conductor`, `e2e`, `mlflow`) sit behind Compose profiles so the core demo starts on a
-laptop. In Azure the same images run on AKS from Azure Container Registry, deployed with Helm.
+services (`conductor`, `worker`, `e2e`, `mlflow`) sit behind Compose profiles so the core demo starts
+on a laptop: with the `process` profile off, the API's in-process engine runs the same workflow. In Azure the same images run on AKS from Azure Container Registry, deployed with Helm.
 
 ---
 
@@ -243,7 +328,9 @@ laptop. In Azure the same images run on AKS from Azure Container Registry, deplo
 A **case** belongs to a customer and has **documents**; each document produces **extracted fields**
 (value, confidence, calibrated confidence, page, bounding box, source snippet, critical flag).
 Rules produce **findings** (severity, description, policy citation). When a human is needed, a
-**review task** is created with a reason code and an SLA. Every action — by a person, an agent or the
+**review task** is created with a reason code, an SLA and, if the timer found it late, an
+escalation timestamp. Handing the case to the system of record writes a **posting** — one row per
+attempt, whatever the outcome, with a unique idempotency key. Every action — by a person, an agent or the
 system — appends one row to **events**, which is never updated or deleted: the case timeline and the
 audit log are two reads of that one table. Configuration lives in **document types** (field schema +
 rules) and **prompts** (semantic versions with draft / approved / retired status).

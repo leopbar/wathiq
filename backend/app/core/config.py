@@ -66,6 +66,26 @@ class Settings(BaseSettings):
     review_sla_hours: int = 4
     sla_at_risk_fraction: float = 0.25
 
+    # --- process layer ---------------------------------------------------
+    # Which engine runs the business process. `auto` prefers Conductor and falls back to the
+    # in-process engine when Conductor is not reachable, saying so in the case's event log.
+    # `conductor` refuses to start a case without Conductor, which is what a real deployment
+    # wants: silently degrading in production would hide a broken orchestrator.
+    process_engine: Literal["auto", "conductor", "inprocess"] = "auto"
+    conductor_url: str = ""
+    conductor_timeout_seconds: float = 10.0
+    # A separate, short timeout for the "is Conductor up?" probe. A hung orchestrator must not
+    # hold up starting a case while the engine decides whether to fall back.
+    conductor_probe_timeout_seconds: float = 2.0
+    # How long a worker waits for a task before polling again.
+    conductor_poll_seconds: float = 1.0
+    conductor_batch_size: int = 1
+    # The in-process engine has no timer service, so one sweep looks for overdue reviews.
+    # Conductor has a WAIT task per case and does not need this.
+    sla_sweep_seconds: int = 60
+    # On startup, look for cases left mid-process by a crash and carry them on.
+    process_recover_on_startup: bool = True
+
     # --- web ------------------------------------------------------------
     # NoDecode: the value arrives as a plain comma-separated string, not JSON.
     cors_origins: Annotated[list[str], NoDecode] = Field(

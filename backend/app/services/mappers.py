@@ -74,6 +74,7 @@ def review_task_out(
         assigned_to=user_ref(task.assigned_to),
         sla_due_at=task.sla_due_at,
         sla_state=sla_state(task.sla_due_at),
+        escalated_at=task.escalated_at,
         decision=task.decision,
         decision_reason_code=task.decision_reason_code,
         decision_note=task.decision_note,

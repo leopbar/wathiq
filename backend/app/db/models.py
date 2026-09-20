@@ -16,6 +16,7 @@ from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    DDL,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -32,6 +33,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
+from sqlalchemy import event as sa_event
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -255,6 +257,72 @@ class Event(Base):
     __table_args__ = (Index("ix_events_case_seq", "case_id", "seq"),)
 
 
+# "Append-only" is a claim, so the database enforces it rather than the application promising
+# it. Without this, a bug — or anyone with the application's own credentials — could quietly
+# rewrite history through the same connection the API uses. With it, the attempt fails loudly.
+# The audit trail is the one table where that guarantee has to be real.
+EVENTS_APPEND_ONLY_SQL = """
+CREATE OR REPLACE FUNCTION events_append_only() RETURNS trigger AS $$
+BEGIN
+    -- The message is built by concatenation rather than with a format placeholder: this
+    -- statement is also handed to SQLAlchemy's DDL construct, which treats a per-cent sign as
+    -- its own substitution and would fail to compile it.
+    RAISE EXCEPTION USING
+        MESSAGE = 'events is append-only: ' || TG_OP || ' is not allowed',
+        ERRCODE = 'restrict_violation';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS events_no_update_delete ON events;
+CREATE TRIGGER events_no_update_delete
+    BEFORE UPDATE OR DELETE ON events
+    FOR EACH ROW EXECUTE FUNCTION events_append_only();
+"""
+
+# Attached to metadata, so the guarantee exists both after an Alembic migration and after
+# `create_all` in the test database. A rule that only holds in production is not a rule.
+sa_event.listen(
+    Event.__table__,
+    "after_create",
+    DDL(EVENTS_APPEND_ONLY_SQL).execute_if(dialect="postgresql"),
+)
+
+
+class Posting(Base):
+    """One attempt to hand an approved case to the system of record.
+
+    The row exists whatever the outcome — posted, skipped or failed — because "we did not post
+    this, and here is why" is exactly the kind of thing an auditor asks about.
+
+    `idempotency_key` is UNIQUE. That is the real guarantee: two workers racing after a
+    Conductor redelivery cannot both insert, whatever the application code does. The simulated
+    core banking server honours the same key independently, so the protection holds even if
+    this table were empty.
+    """
+
+    __tablename__ = "postings"
+
+    id: Mapped[UUID] = uuid_pk()
+    case_id: Mapped[UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), index=True)
+    # Derived from the case, never random: the same case always produces the same key, which
+    # is what makes a retry a retry instead of a second posting.
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    status: Mapped[enums.PostingStatus] = mapped_column(
+        _enum(enums.PostingStatus, "posting_status")
+    )
+    reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    customer_id: Mapped[str] = mapped_column(String(64), default="")
+    # "human" or "straight_through_policy" — which authority allowed this posting.
+    approval_kind: Mapped[str] = mapped_column(String(40), default="")
+    approved_by: Mapped[str] = mapped_column(String(160), default="")
+    # True when the system of record recognised the key and returned the original reference.
+    duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+    response: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = created_at_col()
+
+
 class ReviewTask(Base):
     __tablename__ = "review_tasks"
 
@@ -273,6 +341,9 @@ class ReviewTask(Base):
         ForeignKey("users.id"), nullable=True, index=True
     )
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once, the first time the SLA timer found this review still open. Both engines check
+    # it before escalating, so a re-delivered timer cannot escalate the same review twice.
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decision: Mapped[enums.ReviewDecision | None] = mapped_column(
         _enum(enums.ReviewDecision, "review_decision"), nullable=True
     )

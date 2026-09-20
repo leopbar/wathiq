@@ -115,6 +115,15 @@ class ReviewDecision(StrEnum):
     escalate = "escalate"
 
 
+class PostingStatus(StrEnum):
+    """What happened when the case was handed to the system of record."""
+
+    posted = "posted"
+    # Nothing was sent, and the reason is recorded. A skip is never silent.
+    skipped = "skipped"
+    failed = "failed"
+
+
 class PromptStatus(StrEnum):
     draft = "draft"
     approved = "approved"

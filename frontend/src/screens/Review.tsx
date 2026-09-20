@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Hand, Inbox } from "lucide-react";
+import { ArrowUpFromLine, Hand, Inbox } from "lucide-react";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { Page, ReviewTask, SlaState } from "@/lib/types";
@@ -86,6 +86,14 @@ export default function Review() {
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={row.reason === "mandatory" ? "danger" : "warning"}>{row.reason_label}</Badge>
           <code className="text-caption text-ink-2/80">{row.reason_code}</code>
+          {/* The SLA timer already found this one late and moved it to the supervisor queue.
+              Worth saying on the row: it explains why a reviewer no longer sees it. */}
+          {row.escalated_at ? (
+            <Badge tone="warning">
+              <ArrowUpFromLine className="h-3 w-3" aria-hidden />
+              escalated
+            </Badge>
+          ) : null}
         </div>
       ),
     },

@@ -282,3 +282,79 @@ rather than sending the same fixed ones every time.
 
 **Policy citation** — the section of policy behind a finding, quoted from the indexed corpus, so a
 reviewer can see the rule as written rather than a paraphrase of it.
+
+---
+
+## Added in M4 (the process layer)
+
+**Process layer** — the part that knows the *order of business steps*: who must act, how long they
+have, and what happens when nobody does. Separate from the reasoning layer, which only works out
+what the documents say. *Like the difference between the case manager and the analyst.*
+
+**Orkes Conductor** — the workflow engine that runs the process layer. You give it a workflow
+definition (a list of steps in JSON) and it decides when each step runs, retries the ones that fail
+and waits — for days if needed — on the ones that need a person.
+
+**Workflow definition** — the steps, written down as data rather than code. Wathiq declares it once
+in `process/definition.py`; the Conductor JSON, the step list in the UI and the diagram on the About
+screen are all generated from it.
+
+**Workflow instance** — one run of that definition, for one case. Its id is also the LangGraph thread
+id, which is how one search finds the business history and the reasoning history together.
+
+**Task queue** — a named list of work waiting to be done (`wathiq_post`, `wathiq_agent`…). Conductor
+puts work on it; a worker takes work off it. *Like a job pinned to a board that any free member of
+the team can take.*
+
+**Worker** — a small program that polls one queue, does the job and reports the result. Wathiq's
+workers run the same image as the API, started differently, so the reasoning code is identical.
+
+**Polling** — asking "is there any work for me?" over and over. Long polling asks and then waits a
+moment before answering, so an idle system is not asking a thousand times a second.
+
+**HUMAN task** — a step that simply waits until a person completes it. It is a task in the process,
+not a flag on a row, which is why the wait survives a restart of everything around it.
+
+**WAIT task** — a step that does nothing except wait for a set time. Wathiq uses one as the SLA
+timer.
+
+**FORK / JOIN** — a fork starts two branches at once; a join waits for the ones you name. Wathiq
+forks the human review and the SLA timer, and joins on the review alone, so a fired timer can
+escalate but can never finish a case on a person's behalf.
+
+**SWITCH** — a step that picks a branch from a value. Here it reads the agent's own answer to "does a
+human have to look?".
+
+**SLA (service level agreement)** — the time a review is allowed to take. *Like a promise to answer
+a letter within four hours.*
+
+**Escalation** — what happens when the SLA runs out: the review moves to the supervisor queue and the
+case priority is raised. The case is not decided or cancelled — it still needs a human answer.
+
+**Idempotent** — safe to do twice. Posting the same KYC refresh again produces the same reference
+instead of a second posting. *Like a lift button: pressing it five times does not call five lifts.*
+
+**Idempotency key** — the identifier that lets the receiver recognise a repeat. Wathiq derives it
+from the workflow instance, so a retry always carries the same one.
+
+**At-least-once delivery** — the guarantee a task queue actually gives: your job will run, possibly
+more than once. It is why every step here can be repeated safely.
+
+**Redelivery** — when a worker stops answering, the orchestrator gives its task to someone else.
+This is what crash recovery *is* under Conductor; the fallback engine has to sweep for stuck cases
+itself instead.
+
+**Response timeout** — how long a worker has to report back before its task is redelivered. *Like a
+library loan: if you do not renew it, somebody else can borrow the book.*
+
+**System of record** — the system that holds the official version of something. For a customer's KYC
+file that is core banking. Wathiq's is *simulated*, and labelled as such everywhere it appears.
+
+**Straight-through processing (STP)** — a case that completes with nobody looking at it. Its posting
+is approved by a named *policy* rather than a person, and the record says which.
+
+**Append-only** — a table you may add to but never change or remove from. Wathiq's audit trail is
+append-only, and since M4 a database trigger enforces it rather than the code merely promising it.
+
+**Trigger** — a rule the database runs by itself whenever a row changes. Wathiq's raises an error on
+any attempt to update or delete an audit entry.

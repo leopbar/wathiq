@@ -1,6 +1,6 @@
 # Wathiq — local development stack.
 #   docker compose up --build            start everything (hot reload)
-#   docker compose --profile process up  also start Orkes Conductor (needs ~2 GB more RAM)
+#   docker compose --profile process up  also start Orkes Conductor and its workers (~2 GB more RAM)
 #   docker compose --profile test run --rm e2e   run the Playwright end-to-end tests
 #
 # Production images are built from the same Dockerfiles: see compose.prod.yaml.
@@ -39,6 +39,12 @@ services:
       WATHIQ_BUILD_SHA: ${WATHIQ_BUILD_SHA:-dev}
       WATHIQ_CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       WATHIQ_STORAGE_DIR: /app/storage
+      # Process layer. `auto` uses Conductor when it answers and the in-process engine when it
+      # does not, and says which one ran each case. With the `process` profile off, the
+      # `conductor` hostname does not resolve, the probe fails in milliseconds, and the
+      # fallback runs the same workflow.
+      WATHIQ_PROCESS_ENGINE: ${WATHIQ_PROCESS_ENGINE:-auto}
+      WATHIQ_CONDUCTOR_URL: ${WATHIQ_CONDUCTOR_URL:-http://conductor:8080}
       # MCP tool servers. Each node of the graph is given only the ones it needs.
       WATHIQ_MCP_DOCUMENT_STORE_URL: http://mcp-document-store:9101/mcp
       WATHIQ_MCP_COMPANY_REGISTRY_URL: http://mcp-company-registry:9102/mcp
@@ -134,6 +140,49 @@ services:
       - api
     restart: unless-stopped
 
+  # ---- the process layer's workers ---------------------------------------
+  # The same image as the API, started as a Conductor task worker instead of a web server. It
+  # runs the LangGraph graph, so it must be the same code — two images would mean two versions
+  # of the reasoning, which an auditable system cannot have.
+  #
+  # In the `process` profile, because without Conductor there is no queue to poll: the API's
+  # in-process engine walks the same steps itself.
+  worker:
+    build:
+      context: ./backend
+      target: dev
+    profiles: ["process"]
+    # Hot reload, like the API: `watchfiles` comes with uvicorn[standard] and restarts the
+    # worker when a file under app/ changes. Without it a code change would silently keep
+    # running the old steps, which is a confusing way to lose an afternoon.
+    command:
+      ["watchfiles", "--filter", "python", "python -m app.process.worker_main", "app"]
+    environment:
+      WATHIQ_MODE: ${WATHIQ_MODE:-demo}
+      WATHIQ_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-wathiq}:${POSTGRES_PASSWORD:-wathiq}@db:5432/${POSTGRES_DB:-wathiq}
+      WATHIQ_LOG_LEVEL: ${WATHIQ_LOG_LEVEL:-INFO}
+      WATHIQ_STORAGE_DIR: /app/storage
+      WATHIQ_PROCESS_ENGINE: conductor
+      WATHIQ_CONDUCTOR_URL: ${WATHIQ_CONDUCTOR_URL:-http://conductor:8080}
+      # The API owns the schema and the demo data. Two containers running `alembic upgrade`
+      # at the same moment is a race worth not having.
+      WATHIQ_RUN_MIGRATIONS: "0"
+      WATHIQ_SEED_ON_START: "0"
+      WATHIQ_MCP_DOCUMENT_STORE_URL: http://mcp-document-store:9101/mcp
+      WATHIQ_MCP_COMPANY_REGISTRY_URL: http://mcp-company-registry:9102/mcp
+      WATHIQ_MCP_SANCTIONS_URL: http://mcp-sanctions:9103/mcp
+      WATHIQ_MCP_CORE_BANKING_URL: http://mcp-core-banking:9104/mcp
+    volumes:
+      - ./backend/app:/app/app
+      # The same document volume as the API: the worker reads the files it extracts from.
+      - api-storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      conductor:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ---- heavy, opt-in ------------------------------------------------------
   conductor:
     image: conductoross/conductor-standalone:3.15.0
@@ -142,11 +191,13 @@ services:
       - "${CONDUCTOR_PORT:-8080}:8080"
       - "${CONDUCTOR_UI_PORT:-5000}:5000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      # wget, not curl: the standalone image has no curl, and a healthcheck that can never
+      # pass would block the worker for ever, because the worker waits for this to be healthy.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 90s
+      start_period: 120s
     restart: unless-stopped
 
   e2e:

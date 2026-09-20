@@ -360,3 +360,102 @@ showing an empty page that looks like a failure.
 **The bug it caused:** the panel fetched once on mount and froze whatever half-finished snapshot it
 caught — "0 steps" for a run that did six. It now follows the case while it is moving and refetches
 once when the status settles.
+
+### 46. Two process engines, one set of steps
+**Why:** Conductor needs about 2 GB of RAM. A demo that cannot run without it is a fragile demo, and
+the laptop this is built on has 16 GB to share with everything else. So the process layer has a
+second engine that walks the same steps in Python.
+**What makes it honest:** both engines call the same functions in `process/tasks.py` and write the
+same entries to the same append-only log. The fallback is not a second implementation of the business
+process — it is the same steps with a different scheduler. Every case records which engine ran it, so
+a case processed by the fallback can never be mistaken for one that went through Conductor, and the
+Settings screen says plainly when `auto` had to fall back.
+**Not chosen:** making Conductor mandatory (the demo stops working on a tired laptop), or dropping
+Conductor and only ever claiming to use it (dishonest, and it is named in the job description).
+
+### 47. A decision goes back to the engine that started the case
+**Why:** A case can sit at the human step for hours. In that time the API may have restarted, or
+Conductor may have gone down and `auto` fallen back. Handing the reviewer's answer to *today's*
+engine would leave a Conductor workflow waiting for ever for an answer that went somewhere else. The
+engine is therefore looked up from the case's own `process.started` event, not from the current
+configuration.
+
+### 48. A hand-written Conductor client, not the official SDK
+**Why:** `conductor-python` brings its own threaded worker runtime. This application is asyncio from
+top to bottom, and mixing the two would mean two concurrency models in one container for the sake of
+six HTTP endpoints. The client is about 200 lines of `httpx` and keeps the fallback engine and the
+Conductor engine sharing everything except scheduling.
+**Its cost, stated:** we own the compatibility. If Conductor changes those endpoints, this breaks and
+the SDK would not have. The endpoints used are the stable REST ones (`/api/metadata`,
+`/api/workflow`, `/api/tasks`), and there is a test suite against a fake transport.
+
+### 49. The SLA timer runs beside the review, and the join waits for the review alone
+**Why:** The obvious design — review, then a timeout — cannot escalate a review that is late, because
+nothing is watching while it waits. The fork runs the timer next to the human task instead, and the
+join lists only the human task. A fired timer escalates; it never finishes a case on a person's
+behalf.
+**The consequence we had to handle:** the timer branch is still sitting in its `WAIT` once the review
+is answered, so the workflow instance would stay RUNNING for the rest of the SLA window. Completing
+the human task now also releases that `WAIT`, in that order — so the escalation step, which runs
+straight afterwards, sees a review that is already closed and records that there was nothing to do.
+
+### 50. Escalation moves the queue, it does not take work away from a person
+**Why:** An overdue review that somebody has already claimed is usually a reviewer in the middle of a
+hard case. Yanking it into the supervisor queue would throw away their half-made decision and start
+the reading again. So an *unclaimed* overdue review changes hands, a *claimed* one stays with its
+reviewer, and both are recorded. Either way the case priority is raised and the supervisor is told.
+**The fix it forced:** the review queue now filters on `assigned_role`, so an escalated task really
+does leave the reviewer's list. Before that, escalation changed a label and nothing else.
+
+### 51. The idempotency key is derived from the workflow, never random
+**Why:** The point of the key is that a retry produces the *same* key. `<workflow id>:kyc_refresh:1`
+does: the same case always produces it, and a restarted workflow — which is a deliberate decision to
+run the business process again — produces a different one.
+**Enforced twice:** a `UNIQUE` column in our `postings` table and the simulated core banking server's
+own key table. A redelivered task, a worker that died between the call and the commit, and two
+workers racing all end with one posting. The contract version at the end of the key means a genuine
+change to the payload can post again while a retry of the old payload cannot.
+
+### 52. A posting that did not happen is written down
+**Why:** "We did not post this" is exactly what an auditor asks about. A rejected case, a customer
+with no file in the system of record, a tool server that is not configured — each writes a `postings`
+row with its reason instead of leaving silence that looks like success.
+
+### 53. Straight-through cases are posted under a named policy, not a person
+**Why:** The whole value of straight-through processing is that nobody looks at the case. But the
+system of record only accepts a posting with a named approver, and writing a person's name there
+would be a lie. So an approval carries a *kind*: `human`, or `straight_through_policy` with the
+policy's identifier. The server rejects any kind it does not recognise, and the case screen shows
+"a policy, not a person" in as many words.
+
+### 54. `completed` means posted and sealed, not "the model stopped thinking"
+**Why:** Before M4 the graph set a case to `completed` when it finished reasoning. With a process
+layer that is wrong: the case still has to be posted and its audit entry written. The graph now ends
+at `approved` and only the audit step writes `completed`.
+**What it broke, and how we found it:** the case screen polled only while a case was `intake` or
+`processing`, so it stopped one step early and sat on "Approved" until the page was reloaded. The
+end-to-end tests caught it because they wait for the process to finish, not for the graph to.
+
+### 55. The audit trail's append-only rule is enforced by the database
+**Why:** "Append-only" was true because nothing in the code wrote an `UPDATE`. Convention is not a
+control — a bug, or anyone with the application's own credentials, could quietly rewrite history. A
+trigger on `events` now raises on every `UPDATE` and `DELETE`.
+**Its limits, said out loud:** a database superuser can drop a trigger, and `TRUNCATE` does not fire
+row triggers. This proves the *application* cannot alter the log; it is not cryptographic proof. A
+hash chain per row is the next step if an auditor needs tamper evidence, and the integrity endpoint
+says so rather than implying more than it has.
+**What it forced:** reseeding the demo database used to `DELETE` from every table. It now uses
+`TRUNCATE`, which is the right boundary rather than a loophole — it needs table-owner rights and
+empties the table completely, so it cannot be used to alter one record.
+
+### 56. A redelivered agent task continues the graph, it does not restart it
+**Why:** At-least-once delivery means the agent step can arrive twice. Calling the graph with the
+initial state again would apply that state on top of an existing checkpoint, and the keys the
+parallel workers write use appending reducers — so every list would quietly gain a duplicate. The
+step checks for a checkpoint first and resumes from it instead.
+
+### 57. Conductor gets an identifier, never a customer's data
+**Why:** Conductor is a separate system with its own storage and retention, and its UI is visible to
+anyone who can reach it. Every task payload is the case id and nothing else; the worker reads what it
+needs from the database itself. A test asserts that no customer field and no document text appears
+anywhere in the workflow definition.

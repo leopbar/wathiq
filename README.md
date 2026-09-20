@@ -76,23 +76,33 @@ prompt, rules, golden set) to prove the engine does not change when a document t
 ```mermaid
 flowchart TB
     subgraph P["Process layer — Orkes Conductor"]
-        A["intake"] --> B["guardrails"] --> D["agent task"]
-        D --> E["HUMAN task + WAIT timer (SLA)"]
-        E --> F["post to core banking"] --> H["audit"]
+        A["intake"] --> D["agent task"]
+        D --> SW{"does a human<br/>have to look?"}
+        SW -->|no| F
+        SW -->|yes| FK["fork"]
+        FK --> HU["HUMAN task"]
+        FK --> TI["WAIT — SLA timer"] --> ES["escalate"]
+        HU --> JN["join on the review only"] --> AP["apply the decision"] --> F
+        F["post to core banking<br/>idempotent, approved only"] --> H["seal the audit trail"]
     end
     subgraph AI["Reasoning layer — LangGraph (inside the agent task)"]
-        S["supervisor: classify"] --> WK["workers: extract (parallel)"]
+        G["guardrails"] --> S["supervisor: classify"] --> WK["workers: extract (parallel)"]
         WK --> CR["critic"] --> IN["ReAct investigator"]
         IN --> V["validator + calibration"] --> RG["review gate: interrupt()"]
         RG --> FIN["finalize"]
     end
-    D -.->|"workflow id == thread id"| S
-    RG -.->|"resume from checkpoint"| E
+    D -.->|"workflow id == thread id"| G
+    RG -.->|"the graph parks"| HU
+    AP -.->|"resume from the checkpoint"| RG
 ```
 
 **Two layers, one identifier.** Conductor runs the business process and can wait days for a person.
 LangGraph runs the AI reasoning inside a single Conductor task. The Conductor workflow ID is the
 LangGraph thread ID, so one number links the process, the reasoning and the audit trail.
+
+Two details worth noticing in the diagram: the SLA timer runs **beside** the human review rather than
+after it, so a review that is late is noticed while it is still open; and exactly one step writes
+anything outside Wathiq, with an approval and an idempotency key.
 
 Full set of diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — and the same diagrams render
 live inside the app on the **About the system** screen.
@@ -186,6 +196,8 @@ Every item below is demonstrable in the running system; the checklist lives in
 - **MCP** — four servers, extended for the second use case, least-privilege tool sets
 - **Testing** — five bands (model, prompt, agent, AI security, adversarial), golden and regression
   datasets, CI gate on regressions
+- **Process orchestration** — an Orkes Conductor workflow with HUMAN and WAIT tasks, a fork/join SLA
+  timer, Python task workers, idempotent posting and crash recovery by redelivery
 - **HITL** — mandatory and dynamic interrupt points, Conductor wait tasks, checkpoint persistence and
   resumption, crash recovery
 - **AI security** — prompt shielding, PII tokenisation, output sanitisation, Content Safety
@@ -203,8 +215,17 @@ Everything runs in containers; nothing is installed on your machine.
 ```bash
 docker compose up --build                     # start the whole system (hot reload)
 docker compose logs -f api                    # follow the backend
-docker compose --profile process up -d        # add Orkes Conductor (needs ~2 GB more RAM)
+docker compose --profile process up -d        # add Orkes Conductor + its workers (~2 GB more RAM)
+docker compose logs -f worker                 # follow the Conductor task workers
 ```
+
+**With or without Conductor.** The business process is declared once and can be run by two engines:
+Orkes Conductor, or an in-process engine inside the API container. With the `process` profile off,
+the same workflow runs on the fallback — the same steps, from the same code, writing the same audit
+trail. The Settings → Process screen always says which of the two actually ran, and every case
+records it, so a demo on the fallback can never be mistaken for one on Conductor.
+
+Conductor's own UI is at <http://localhost:5000> when the profile is on.
 
 Tests and checks:
 

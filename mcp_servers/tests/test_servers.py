@@ -181,6 +181,36 @@ class TestCoreBanking:
         assert second["duplicate"] is True
         assert first["reference"] == second["reference"]
 
+    async def test_an_unknown_kind_of_approval_is_refused(self) -> None:
+        """The authority behind a posting is part of the record, so it cannot be invented."""
+        answer = await call(
+            core_banking.server,
+            "post_kyc_refresh",
+            case_id="c3",
+            customer_id="SIM-CUS-100001",
+            idempotency_key="idem-kind",
+            approved_by="Someone",
+            approval_kind="because_i_said_so",
+        )
+        assert answer["posted"] is False
+        assert "approval_kind" in answer["error"]
+
+    async def test_a_policy_approval_is_accepted_and_recorded_as_one(self) -> None:
+        """A case no person looked at is posted under a named policy, and says which."""
+        answer = await call(
+            core_banking.server,
+            "post_kyc_refresh",
+            case_id="c4",
+            customer_id="SIM-CUS-100001",
+            idempotency_key="idem-policy",
+            approved_by="Straight-through policy STP-001",
+            approval_kind="straight_through_policy",
+        )
+        assert answer["posted"] is True
+        assert answer["approval_kind"] == "straight_through_policy"
+        read = await call(core_banking.server, "get_posting", reference=answer["reference"])
+        assert read["posting"]["approval_kind"] == "straight_through_policy"
+
     async def test_a_posting_can_be_read_back(self) -> None:
         posted = await call(
             core_banking.server,

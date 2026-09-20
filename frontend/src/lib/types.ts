@@ -176,6 +176,8 @@ export interface ReviewTask {
   assigned_to: UserRef | null;
   sla_due_at: string | null;
   sla_state: SlaState;
+  /** Set when the SLA timer found this review still open and moved it to a supervisor. */
+  escalated_at: string | null;
   decision: ReviewDecision | null;
   decision_reason_code: string | null;
   decision_note: string | null;
@@ -585,4 +587,124 @@ export interface RuleOut {
   explain: string;
   expr: string | null;
   check: string | null;
+}
+
+// ---------------------------------------------------------------- process layer (M4)
+// Conductor runs the business process; LangGraph runs the reasoning inside one of its tasks.
+// These are the shapes the process layer returns, so the UI can say which engine ran a case
+// instead of assuming.
+
+export type ProcessStepStatus =
+  | "pending"
+  | "running"
+  | "waiting"
+  | "completed"
+  | "skipped"
+  | "failed";
+
+export interface ProcessStep {
+  ref: string;
+  label: string;
+  kind: string;
+  status: ProcessStepStatus;
+  at: string | null;
+  detail: string;
+  /** True for the one step that changes something outside Wathiq. */
+  writes_externally: boolean;
+}
+
+export interface Posting {
+  status: "posted" | "skipped" | "failed";
+  reference: string | null;
+  customer_id: string;
+  approval_kind: string;
+  approved_by: string;
+  duplicate: boolean;
+  idempotency_key: string;
+  note: string;
+  posted_at: string | null;
+  simulated: boolean;
+}
+
+export interface ProcessLiveTask {
+  ref: string;
+  type: string;
+  status: string;
+  retried: number;
+}
+
+export interface ProcessStatus {
+  engine: string;
+  workflow_name: string;
+  workflow_version: number;
+  workflow_id: string;
+  route: string;
+  steps: ProcessStep[];
+  posting_reference: string | null;
+  escalated: boolean;
+  started: boolean;
+  finished: boolean;
+  note: string;
+  /** Conductor's own view of the instance — only present when Conductor ran the case. */
+  live: {
+    workflow_id: string;
+    status: string;
+    start_time: number | null;
+    end_time: number | null;
+    tasks: ProcessLiveTask[];
+  } | null;
+  posting: Posting | null;
+}
+
+export interface ProcessStepDefinition {
+  ref: string;
+  kind: string;
+  label: string;
+  description: string;
+  queue: string;
+  writes_externally: boolean;
+  only_on_route: string;
+}
+
+export interface ProcessDefinition {
+  workflow: string;
+  version: number;
+  sla_hours: number;
+  steps: ProcessStepDefinition[];
+  worker_queues: string[];
+  mermaid: string;
+}
+
+export interface EngineHealth {
+  engine: string;
+  reachable: boolean;
+  detail: string;
+  workflow_registered: boolean;
+  url: string;
+}
+
+export interface ProcessHealth {
+  configured: "auto" | "conductor" | "inprocess";
+  active: string;
+  /** True when Conductor was wanted but not reachable. The UI must not hide this. */
+  fell_back: boolean;
+  engines: EngineHealth[];
+  process: ProcessDefinition;
+}
+
+export interface SlaSweepResult {
+  escalated: number;
+  note: string;
+}
+
+export interface AuditIntegrity {
+  append_only_enforced: boolean;
+  trigger: string;
+  detail: string;
+  rows: number;
+  first_seq: number | null;
+  last_seq: number | null;
+  oldest: string | null;
+  newest: string | null;
+  limits: string;
 }

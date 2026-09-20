@@ -293,3 +293,56 @@ All errors: HTTP status + `{ "detail": "<human message>", "code": "<MACHINE_CODE
 | Settings | — | — | ✅ read | ✅ | ✅ read |
 | Audit log | ✅ own cases | ✅ | ✅ | ✅ | ✅ |
 | About | everyone | | | | |
+
+## Process layer (M4)
+`GET /process/health` → which engine is running the business process, and whether Conductor answers
+```ts
+{ configured: "auto"|"conductor"|"inprocess"; active: string; fell_back: boolean;
+  engines: { engine; reachable: boolean; detail: string; workflow_registered: boolean; url: string }[];
+  process: { workflow: string; version: number; sla_hours: number; worker_queues: string[];
+             steps: { ref; kind; label; description; queue; writes_externally; only_on_route }[];
+             mermaid: string } }
+```
+`GET /process/definition` → the workflow as the code declares it (the `process` object above)
+`POST /process/sla/sweep` → run the SLA check now; supervisor or admin only
+```ts
+{ escalated: number; note: string }
+```
+It escalates only reviews that are already past their SLA and have not been escalated before, so it
+cannot manufacture an escalation.
+
+`GET /process/audit-integrity` → whether the database is enforcing append-only on the audit trail
+```ts
+{ append_only_enforced: boolean; trigger: string; detail: string; rows: number;
+  first_seq: number|null; last_seq: number|null; oldest: string|null; newest: string|null;
+  limits: string }
+```
+`limits` states what the check does *not* prove. It is part of the response, not a footnote.
+
+`GET /cases/{id}/process` → where one case is in the business process
+```ts
+{ engine: string; workflow_name: string; workflow_version: number; workflow_id: string;
+  route: "review"|"straight_through"|""; escalated: boolean; started: boolean; finished: boolean;
+  steps: { ref; label; kind; status: "pending"|"running"|"waiting"|"completed"|"skipped"|"failed";
+           at: string|null; detail: string; writes_externally: boolean }[];
+  posting: { status: "posted"|"skipped"|"failed"; reference: string|null; customer_id: string;
+             approval_kind: "human"|"straight_through_policy"|""; approved_by: string;
+             duplicate: boolean; idempotency_key: string; note: string; posted_at: string|null;
+             simulated: true } | null;
+  live: { workflow_id; status; start_time; end_time;
+          tasks: { ref; type; status; retried }[] } | null;
+  posting_reference: string|null; note: string }
+```
+The steps are derived from the case's own append-only event log, so this view and the audit trail
+cannot disagree. `live` is Conductor's own record of the instance, present only when Conductor ran
+the case and answered.
+
+### Statuses a case moves through
+`intake → processing → [needs_review → in_review] → approved → posting → completed`, or `rejected`
+or `failed`. **`completed` means posted and sealed**, not "the graph finished" — the audit step is
+the only thing that writes it.
+
+### New error code
+`503 SERVICE_UNAVAILABLE` / `CONDUCTOR_UNAVAILABLE` — the orchestrator could not be reached. On a
+review decision it means the decision *was* recorded and the case has not moved on yet; a reviewer's
+judgement is never discarded because an orchestrator hiccupped.
