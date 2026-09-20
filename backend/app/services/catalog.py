@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from app.core.config import settings
 from app.db.enums import DocTypeKey, IntegrationStatus, QualityBand, ReviewDecision
+from app.process import definition as process_definition
 from app.schemas.review import ReasonCode
 from app.schemas.settings import Integration
 from app.schemas.system import Diagram, StackItem, StackLayer
@@ -198,8 +199,25 @@ def integrations() -> list[Integration]:
             key="conductor",
             name="Orkes Conductor (process orchestration)",
             category="Process",
-            status=IntegrationStatus.connected,
-            detail="Conductor OSS runs in Docker Compose with Python workers.",
+            # Configured is not the same as reachable, so this row only reports what the
+            # settings say. The About screen replaces it with a live answer from the process
+            # layer, because "is Conductor actually up?" is a question that needs asking, not
+            # assuming.
+            status=(
+                IntegrationStatus.connected
+                if settings.conductor_url
+                else IntegrationStatus.disabled
+            ),
+            detail=(
+                f"Conductor OSS at {settings.conductor_url}, with Python workers polling the "
+                f"task queues. Engine mode: {settings.process_engine}."
+                if settings.conductor_url
+                else (
+                    "No Conductor URL is configured, so the in-process engine runs the same "
+                    "workflow inside the API container. Start Conductor with "
+                    "`docker compose --profile process up`."
+                )
+            ),
         ),
         Integration(
             key="core_banking",
@@ -508,6 +526,17 @@ def diagrams(graph_mermaid: str | None = None) -> list[Diagram]:
                 "the LangGraph thread id, so one identifier ties the whole audit trail together."
             ),
             mermaid=_DIAGRAM_LAYERS,
+        ),
+        Diagram(
+            key="process",
+            title="The business process (Conductor workflow)",
+            description=(
+                "The workflow Conductor runs, generated from the definition in the code, so it "
+                "cannot describe a process we do not execute. Note two things: the SLA timer "
+                "runs beside the human review rather than after it, and exactly one step writes "
+                "outside Wathiq."
+            ),
+            mermaid=process_definition.mermaid(),
         ),
         Diagram(
             key="graph",

@@ -33,6 +33,13 @@ class ConflictError(AppError):
         super().__init__(status.HTTP_409_CONFLICT, detail, code)
 
 
+class ServiceUnavailableError(AppError):
+    """A dependency we need is not answering. Never dressed up as success."""
+
+    def __init__(self, detail: str, code: str = "SERVICE_UNAVAILABLE") -> None:
+        super().__init__(status.HTTP_503_SERVICE_UNAVAILABLE, detail, code)
+
+
 class ValidationError(AppError):
     # 422 spelled numerically: Starlette renamed the constant and deprecated the old name.
     def __init__(self, detail: str, code: str = "INVALID_INPUT") -> None:
@@ -50,7 +57,12 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
-        code = {401: "UNAUTHORIZED", 403: "FORBIDDEN", 404: "NOT_FOUND"}.get(
+        code = {
+            401: "UNAUTHORIZED",
+            403: "FORBIDDEN",
+            404: "NOT_FOUND",
+            503: "SERVICE_UNAVAILABLE",
+        }.get(
             exc.status_code, "HTTP_ERROR"
         )
         return JSONResponse(

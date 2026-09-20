@@ -1,14 +1,15 @@
-"""Launching pipeline runs in the background.
+"""Holding on to background work, so it cannot be garbage-collected mid-run.
 
-An HTTP request should not wait for the whole pipeline, and the browser watches progress over
-SSE instead. So `/start` and the review decision both hand off to here and return immediately.
+An HTTP request must not wait for a whole case to be processed — the browser watches progress
+over SSE instead. So the API hands the case to the process engine and returns immediately.
 
 `asyncio.create_task` alone is not enough: the event loop keeps only a weak reference, so a
-task can be garbage-collected mid-run. We hold a strong reference until it finishes, and we
-log failures rather than letting them disappear into a never-awaited task.
+task can be collected while it is still running. Everything launched here is kept in a set
+until it finishes, and a failure is logged rather than disappearing into a task nobody awaited.
 
-In M4 Conductor takes this over: the same functions get called by a Conductor worker instead
-of a background task, which is what makes the run durable across a restart.
+Since M4 the only caller is the in-process process engine. Under Conductor the same work is
+driven by a worker polling a task queue, which is what makes it survive a restart of this
+container.
 """
 
 from __future__ import annotations
@@ -17,16 +18,14 @@ import asyncio
 import logging
 from collections.abc import Coroutine
 from typing import Any
-from uuid import UUID
-
-from app.agent import runner
 
 logger = logging.getLogger(__name__)
 
 _running: set[asyncio.Task[Any]] = set()
 
 
-def _launch(coro: Coroutine[Any, Any, Any], *, label: str) -> asyncio.Task[Any]:
+def launch(coro: Coroutine[Any, Any, Any], *, label: str) -> asyncio.Task[Any]:
+    """Run a coroutine in the background and keep a strong reference to it."""
     task = asyncio.create_task(coro, name=label)
     _running.add(task)
 
@@ -43,17 +42,9 @@ def _launch(coro: Coroutine[Any, Any, Any], *, label: str) -> asyncio.Task[Any]:
     return task
 
 
-def start(case_id: UUID) -> None:
-    """Run the pipeline for a case, from the beginning."""
-    _launch(runner.start_case(case_id), label=f"pipeline.start:{case_id}")
-
-
-def resume(case_id: UUID, decision: str, corrections: dict[str, str] | None = None) -> None:
-    """Continue a case that was waiting at the review gate."""
-    _launch(
-        runner.resume_case(case_id, decision, corrections),
-        label=f"pipeline.resume:{case_id}",
-    )
+def in_flight() -> int:
+    """How many background runs are going on. Used by tests and the health endpoint."""
+    return len(_running)
 
 
 async def drain(timeout: float = 10.0) -> None:  # noqa: ASYNC109

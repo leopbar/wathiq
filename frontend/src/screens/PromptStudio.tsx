@@ -5,7 +5,7 @@ import { Archive, BadgeCheck, GitCompare, Sparkles } from "lucide-react";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { PromptDiff, PromptSummary, PromptVersion } from "@/lib/types";
-import { formatDateTime, formatPercent } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/auth/useAuth";
 import { can } from "@/auth/roles";
@@ -22,6 +22,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { CodeBlock } from "@/components/ui/code-block";
 import { VersionTimeline } from "./prompts/VersionTimeline";
 import { DiffViewer } from "./prompts/DiffViewer";
+import { PromptEvaluations } from "./prompts/PromptEvaluations";
 
 export default function PromptStudio() {
   const queryClient = useQueryClient();
@@ -207,11 +208,6 @@ export default function PromptStudio() {
                       <Badge tone={current.status === "approved" ? "success" : "warning"}>
                         {current.status}
                       </Badge>
-                      {current.eval_score !== null ? (
-                        <Badge tone="outline">
-                          linked eval {formatPercent(current.eval_score, 1)}
-                        </Badge>
-                      ) : null}
                       {current.approved_by ? (
                         <span className="text-caption text-ink-2">
                           approved by {current.approved_by} ·{" "}
@@ -228,6 +224,10 @@ export default function PromptStudio() {
 
                     <Tabs
                       items={[
+                        {
+                          value: "evaluations", label: "Evaluations",
+                          content: <PromptEvaluations promptKey={selectedKey} version={current.version} mayRun={can(role, "quality.run")} />,
+                        },
                         {
                           value: "body",
                           label: "Prompt body",

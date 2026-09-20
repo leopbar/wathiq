@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
-import { apiFetch, buildQuery } from "@/lib/api";
+import { apiFetch, apiUrl, getToken, buildQuery } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { Page, QualityCalibration, QualityRun, QualitySummary } from "@/lib/types";
 import { formatDateTime, formatDuration, formatPercent, parseDate } from "@/lib/format";
@@ -28,6 +28,21 @@ export default function QualityLab() {
 
   const [band, setBand] = useState("all");
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const download = useMutation({
+    mutationFn: async (kind: "golden" | "regressions") => {
+      const response = await fetch(apiUrl(kind === "golden" ? "/quality/dataset" : "/quality/regressions/export"), {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error("Dataset download failed");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = kind === "golden" ? "wathiq-golden.zip" : "regressions.json";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const summary = useQuery({
     queryKey: qk.qualitySummary,
@@ -58,10 +73,10 @@ export default function QualityLab() {
           description: `Fitted on ${result.curve.sample_count} reviewed field(s). Brier ${result.curve.brier_before.toFixed(3)} → ${result.curve.brier_after.toFixed(3)}.`,
         });
       } else {
-        toast.info("Not enough decided cases yet", {
+          toast.info("Fit was not accepted", {
           description:
             result.curve.sample_count > 0
-              ? `Only ${result.curve.sample_count} reviewed field(s), and none of them disagreed. Confidence stays raw until there is something to learn from.`
+              ? `${result.curve.sample_count} reviewed field(s). The fit requires enough examples of both outcomes and must improve the training Brier score. Confidence stays raw.`
               : "No reviewed fields yet. Confidence stays raw until reviewers have decided some cases.",
         });
       }
@@ -74,13 +89,14 @@ export default function QualityLab() {
 
   const startRun = useMutation({
     mutationFn: (target: string) =>
-      apiFetch<QualityRun>("/quality/runs", {
+      apiFetch<{ runs: QualityRun[] }>("/quality/runs", {
         method: "POST",
         body: JSON.stringify({ band: target }),
       }),
-    onSuccess: (run) => {
-      toast.success("Evaluation started", {
-        description: `Band “${run.band}” is running. Results land in the history below.`,
+    onSuccess: ({ runs }) => {
+      const failed = runs.reduce((total, run) => total + run.failed, 0);
+      toast[failed ? "warning" : "success"]("Evaluation finished", {
+        description: `${runs.length} band(s), ${runs.reduce((total, run) => total + run.passed + run.failed, 0)} checks, ${failed} failed.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["quality"] });
     },
@@ -92,7 +108,7 @@ export default function QualityLab() {
     {
       key: "band",
       header: "Band",
-      cell: (row) => <span className="text-small font-medium text-ink">{row.band}</span>,
+      cell: (row) => <span className="text-small font-medium text-ink">{row.band}{row.provenance.kind !== "measured" ? " · illustrative" : ""}</span>,
     },
     {
       key: "score",
@@ -186,6 +202,18 @@ export default function QualityLab() {
         }
       />
 
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="text-small text-ink-2">
+          <p>50 synthetic documents · 5 quality conditions · English and bilingual Arabic labels.</p>
+          <p>Blurry scans test abstention. Scores are diagnostic checks, not production accuracy.</p>
+          <p>{summary.data?.regression_cases ?? 0} saved reviewer corrections.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" disabled={download.isPending} onClick={() => download.mutate("regressions")}>Export corrections</Button>
+          <Button size="sm" variant="secondary" loading={download.isPending} onClick={() => download.mutate("golden")}>Download golden set</Button>
+        </div>
+      </Card>
+
       {summary.isPending ? (
         <BandCardsSkeleton />
       ) : summary.isError ? (
@@ -267,12 +295,15 @@ export default function QualityLab() {
           ) : calibration.data.points.length === 0 ? (
             <EmptyState
               title="No calibration data"
-              description="The calibration model is fitted on the golden set."
+                description="The calibration model is fitted on reviewer outcomes."
             />
           ) : (
             <div className="p-4">
               <CalibrationChart data={calibration.data} />
               <div className="mt-3 space-y-2 text-caption leading-4 text-ink-2">
+                <p>{calibration.data.sample_count} reviewed fields. {calibration.data.metric_scope}</p>
+                <p>MLflow: {calibration.data.tracking.status}. {calibration.data.tracking.reason}</p>
+                {calibration.data.tracking.run_id ? <a className="text-primary underline" href={`http://localhost:5001/#/experiments/${calibration.data.tracking.experiment_id}/runs/${calibration.data.tracking.run_id}`} target="_blank" rel="noreferrer">Open local MLflow experiment</a> : null}
                 <p>
                   Points on the dashed line mean a stated 80% is right 80% of the time. Points
                   below the line mean the system is overconfident — that is what the calibration

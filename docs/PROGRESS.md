@@ -2,13 +2,15 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M3 (AI depth) is **complete and verified**. The graph now runs guardrails, a
-supervisor that dispatches one worker per document in parallel, self-correcting extraction, an
-actor-critic challenge, a bounded ReAct investigator calling four MCP tool servers, and a
-validator using versioned YAML rules with retrieved policy citations and calibrated confidence.
-183 backend tests, 24 MCP server tests and 22 Playwright tests pass; ruff, eslint and typecheck
-are clean; the whole stack starts from a wiped volume.
-**Next step:** M4 — process layer (Conductor), on branch `m4-process-layer`.
+**Current status:** M5 demo implementation is built on `codex/m5-quality-lab` (based on M4 commit
+`463e086`). This milestone commit records the verified demo implementation. No M5 push has been made.
+235 backend tests passed in the full suite, plus the added Brier regression test (15 focused M5 tests).
+26 MCP tests and 33 Playwright tests pass; ruff, frontend lint, typecheck and production build are clean. The five-band
+CI gate passes locally and negative controls reject broken results. MLflow recorded a real fit on 93
+reviewed fields. Both incremental and fresh-database Alembic migrations passed.
+**Remaining:** push/PR approval. Gitleaks found no secrets; UI and Arabic PDF screenshots reviewed.
+**Explicit M6 dependency:** the prompt-sensitivity harness is implemented and tested, but the demo
+reader ignores wording. Live model sensitivity is unsupported, not scored as a success.
 
 ## Section 0 — Setup
 - [x] Environment checked (Windows 11, 16 GB RAM, Docker Desktop, Git, GitHub CLI)
@@ -63,9 +65,11 @@ are clean; the whole stack starts from a wiped volume.
 - [x] Backend tests: 86 passing (20 agent unit + 7 pipeline integration added), ruff clean
 - [x] Playwright: 17 passing (two new tests run a real PDF through the whole pipeline)
 - [~] Case detail: viewer, confidence, findings and timeline are live. **Field highlighting is
-      not done** — the demo extractor has no bounding boxes, so the UI honestly says "no source
-      region". Real coordinates arrive with Document Intelligence in M3/M6.
-- [ ] Synthetic bilingual (Arabic) document generator — base-14 PDF fonts cannot encode Arabic;
+      still not done** — neither the demo extractor nor M3's workers produce bounding boxes, so
+      the UI honestly says "no source region". Real coordinates arrive with Document
+      Intelligence in M6. M3 did add the next best thing: each field now shows the signals its
+      confidence was built from, including whether the value was found in the document at all.
+- [x] Synthetic bilingual (Arabic) document generator — base-14 PDF fonts cannot encode Arabic;
       moved to M5 with the golden dataset
 - [x] Milestone checks: clean `docker compose down -v` + `up --build`, all suites re-run
 - [x] Docs updated (ARCHITECTURE section 3 split into "runs today" vs "planned"; DECISIONS 27-33)
@@ -82,8 +86,9 @@ are clean; the whole stack starts from a wiped volume.
 - Case detail never refreshed, so a case opened mid-run sat on a stale "Processing" until the
   user reloaded. It now polls only while the case is actually moving.
 - The "What happens next" panel on New case listed guardrails, a supervisor and self-correcting
-  workers — all M3 work that does not exist yet. It is now driven by the same step list the
-  stepper uses, so it cannot describe a pipeline we do not run.
+  workers, none of which existed at the time. It was rewritten to read the same step list the
+  stepper uses, so it cannot describe a pipeline we do not run. (M3 has since built all three,
+  and they appeared in the panel the moment the step list grew — which is the point.)
 
 ## M3 — AI depth
 - [x] Supervisor + parallel workers (Send API), one worker per document
@@ -112,7 +117,12 @@ are clean; the whole stack starts from a wiped volume.
 - [x] Quality Lab: the calibration curve's state, its ground truth, and a "refit" action
 - [x] Milestone checks: clean `docker compose down -v` + `up --build`, every suite re-run
 - [x] Docs updated (ARCHITECTURE section 3 rewritten to the live graph, 4b added for RAG;
-      DECISIONS 34–45; GLOSSARY "Added in M3")
+      DECISIONS 34–45; GLOSSARY "Added in M3"; API and README)
+- [x] CI: a new `mcp` job, and the backend and e2e jobs now start the tool servers — without
+      them the agent records "could not check", which is a different outcome from the one
+      under test
+- [x] Commits `576e358` and `70e25a1`, PR #2 merged into `main` (`4c48548`), all five CI jobs
+      green on both the push and the pull-request trigger
 
 ### Bugs found and fixed while building M3
 - **The pipeline read the PII-tokenised copy of each document**, so every date arrived as
@@ -137,26 +147,112 @@ are clean; the whole stack starts from a wiped volume.
 - **Name matching missed transliterations.** Token overlap scored "Youssef Karam" against
   "Youssef Karem" at 0.33 and would have missed a real screening match; character similarity is
   now combined with it.
+- **A dashboard test failed in CI and passed locally.** Diagnosed first as a timing flake and
+  given a longer timeout, which was wrong: "Straight-through" appears three times on the
+  dashboard, so the assertion hit a Playwright strict-mode violation the moment the charts
+  rendered. The KPI block is now a `<section>` with an accessible name — a landmark for screen
+  readers as well as a stable anchor for the test.
 
 ## M4 — Process layer
-- [ ] Conductor workflow (HUMAN + WAIT tasks)
-- [ ] Python workers; workflow ID = thread ID
-- [ ] Idempotent core-banking posting
-- [ ] Append-only audit trail (table + API done in M1; wire the agent events in M4)
-- [ ] SLA escalation
-- [ ] Crash-recovery test
-- [ ] Milestone checks + docs + commit/PR
+- [x] Conductor workflow `wathiq_kyc_refresh` v1: intake → agent → SWITCH → (FORK: HUMAN task +
+      WAIT timer → escalate | JOIN on the review alone → apply decision) → post → audit
+- [x] The workflow is declared once as data (`process/definition.py`); the Conductor JSON, the UI
+      step list and the About diagram are all generated from it, and a test proves they agree
+- [x] Python task workers polling six queues, in the same image as the API (so the reasoning code
+      is identical), with hot reload in dev and a clean SIGTERM shutdown
+- [x] Second engine: an in-process runner calling the *same* step functions, for a machine without
+      2 GB to spare. `WATHIQ_PROCESS_ENGINE=auto|conductor|inprocess`
+- [x] Every case records which engine ran it; a decision always goes back to that engine
+- [x] Workflow ID == LangGraph thread ID, applied by the intake step before anything needs it
+- [x] Idempotent core-banking posting: key derived from the workflow, enforced by a UNIQUE column
+      *and* by the simulated system of record; a skip is always recorded with its reason
+- [x] Straight-through cases post under a named policy, never under a person's name
+- [x] SLA escalation: unclaimed work moves to the supervisor queue, claimed work stays with its
+      reviewer, `escalated_at` makes it happen once. The reviewer queue now filters on
+      `assigned_role`, so an escalated task really does leave their list
+- [x] Append-only audit trail enforced by a PostgreSQL trigger, with an integrity endpoint that
+      also states what the check does not prove
+- [x] Crash recovery: Conductor redelivers (the agent step *continues* the graph rather than
+      restarting it); the fallback sweeps for stuck cases at startup. Verified on live containers
+      in both shapes — with the posting row surviving, and with it lost
+- [x] Case screen: a Process tab reading the case's own event log, with the posting, the
+      idempotency key and Conductor's own view of the instance beside it
+- [x] Settings: a Process tab with both engines' health, the generated workflow diagram, the step
+      list, the SLA rule and a supervisor-only "run the SLA check now"
+- [x] Backend tests: 221 passing (38 new); MCP servers: 26 (2 new); Playwright: 30 (8 new)
+- [x] Milestone checks: clean `docker compose --profile process down -v` + `up --build`, every
+      suite re-run, the UI walked screen by screen
+- [x] Docs updated (ARCHITECTURE 2 rewritten and 2b added; DECISIONS 46–57; GLOSSARY "Added in
+      M4"; API.md process endpoints; README)
+- [ ] Commit, push and PR
+
+### Bugs found and fixed while building M4
+- **The case screen stopped polling one step early.** `completed` now means "posted and sealed",
+  so a case passes through `approved` and `posting` on its way there — statuses the detail screen
+  did not treat as "still moving". It sat on "Approved" until the page was reloaded. The same
+  omission was in the SSE stream's list of moving statuses.
+- **Escalation changed a label and nothing else.** The review queue filtered on `assigned_to_id`
+  but never on `assigned_role`, so a task escalated to a supervisor stayed in the reviewer's list.
+- **The append-only trigger broke reseeding.** `clear_all` deleted from every table, which the
+  trigger correctly refused. It now uses `TRUNCATE` — which needs table-owner rights and empties
+  the table completely, so it cannot be used to alter one record. (DECISIONS #55)
+- **SQLAlchemy could not compile the trigger's SQL.** `RAISE EXCEPTION '... % ...'` uses a
+  per-cent sign, which the `DDL` construct treats as its own substitution. The message is now
+  built by concatenation.
+- **Conductor refused the HUMAN task definition**: `responseTimeoutSeconds: 0` is rejected even
+  for a task no worker polls. It is 30 days now, with `ALERT_ONLY` so reaching it only logs.
+- **The Conductor workflow never reached COMPLETED after a review.** The SLA branch was still
+  sitting in its `WAIT`, so the instance stayed RUNNING for the rest of the window. Completing the
+  human task now also releases that timer — in that order, so the escalation step that follows
+  sees a review that is already closed.
+- **The human step stayed "waiting" for ever** in the process view: nothing recorded that it had
+  finished. The decision step now closes it, the timer and the join explicitly.
+- **The worker ran stale code for half an hour.** It had no hot reload, unlike the API, so a change
+  to a step was silently not running. It now starts under `watchfiles` in dev.
+- **Conductor's healthcheck could never pass**: the standalone image has no `curl`. The worker
+  waits for that healthcheck, so it would have waited for ever.
 
 ## M5 — Quality Lab + Prompt Studio
-- [ ] Golden dataset generator
-- [ ] Regression cases from reviewer corrections
-- [ ] Five test bands (schema + API + UI seeded in M1; real runs in M5)
-- [ ] Prompt registry (semver, statuses, diffs, approval) — API done in M1, evals in M5
-- [ ] Calibration chart + MLflow
-- [ ] CI regression gate
-- [ ] Milestone checks + docs + commit/PR
+
+- [x] Golden generator: 50 PDFs, five document types, clean/blurry/cropped/wrong-type/missing-field
+      conditions, independent answer keys, authenticated ZIP download
+- [x] Bilingual Arabic labels with an embedded shaped font; PDF rendered and visually checked.
+      Values are synthetic English strings. Blurry PDFs test abstention, not optical recognition.
+- [x] Reviewer corrections copied into permanent input/schema/answer snapshots and replayed in the
+      agent band; export to a checked-in JSON fixture lets CI use the same synthetic examples
+- [x] Five real diagnostic bands runnable from Quality Lab and CI; measured provenance and sample
+      counts, illustrative seed runs excluded from the summary, every band has a negative control
+- [x] Prompt-version diagnostics and history with body hash; evaluation does not approve a version
+- [~] Prompt sensitivity: harness compares wording variants and detects both unstable answers and
+      stable wrong answers. Live model experiments await Foundry in M6; demo mode explicitly says
+      unsupported, zero samples, no claimed robustness score
+- [x] Calibration Brier corrected to use individual outcomes, rejected cases excluded from positive
+      labels, chart marked as training diagnostics, every fit attempt persisted
+- [x] Optional MLflow service behind `ml`, non-root, persistent storage, port 5001; real fit tracked,
+      unavailable service leaves local fitting usable and reports tracking failure honestly
+- [x] CI gate rejects any failed diagnostic; negative-control command must exit 1; a separate test
+      breaks the actual extractor and proves the golden set detects it
+- [x] Verification: 235-test full backend run plus added Brier regression test; 15 focused M5 tests,
+      26 MCP and 33 Playwright tests pass; ruff/eslint/typecheck/production build clean
+- [x] Fresh and upgrade migrations verified without wiping the user's development database
+- [x] Documentation, clean full browser run (no retries), screenshot review and secret scan
+- [x] Milestone commit approved by the user
+- [ ] Push/PR approval
+
+Implementation and limits: [QUALITY.md](QUALITY.md). CI reads the committed correction export,
+not the developer's live database. No real customer data belongs in that export.
+
+### Bugs found while building M5
+- Arabic label normalisation deleted all Arabic letters, collapsing different labels into one key.
+  The extractor, repair worker and critic now preserve Unicode letters.
+- The results drawer read `status` although the API returns `passed`, displaying successes as failures.
+- The evaluation button returned a seeded run instead of running anything.
+- The displayed Brier score used squared chart-bin gaps instead of individual binary outcomes.
+- A refused refit left the old curve active in PostgreSQL while process memory said raw confidence.
+- The worker inherited an HTTP healthcheck although it is a queue-polling process with no HTTP server.
 
 ## M6 — Azure mode
+- [ ] Connect the sensitivity harness to Foundry and run actual prompt-wording experiments
 - [ ] Foundry / Document Intelligence / Content Safety / AI Search / ADLS / Azure ML / Monitor
 - [ ] Entra ID (MSAL) auth
 - [ ] Bicep + Helm + teardown script
@@ -183,20 +279,21 @@ are clean; the whole stack starts from a wiped volume.
 - [x] Pydantic validation (models built at runtime from the document type's schema; the same
       schema is the structured-output contract in M6)
 - [~] Prompt management with semver (registry, diffs, approval done; engine pinning in M2)
-- [ ] Prompt sensitivity + correctness testing
+- [~] Prompt correctness checks and sensitivity harness; live model sensitivity requires M6
 - [x] MCP servers: 4 servers, least privilege per node
 - [~] MCP servers extended for use case 2 (the same servers serve it; salary-specific tools in M7)
-- [~] Five test bands (schema, API and seeded results; real suites in M5)
-- [ ] Golden + regression datasets
+- [x] Five test bands (real API/CI suites with counts, provenance and negative controls)
+- [x] Golden + regression datasets
 - [x] HITL at mandatory and dynamic points (mandatory and dynamic review tasks both created)
-- [ ] Conductor wait tasks
-- [x] Checkpoint persistence and resumption
+- [x] Conductor wait tasks (a WAIT task beside the human task, as the SLA timer)
+- [x] Checkpoint persistence and resumption (and crash recovery: redelivery under Conductor,
+      a startup sweep under the fallback)
 - [~] Content Safety (local term-list stand-in, clearly labelled; Azure service in M6)
 - [x] PII tokenisation (7 recognisers; only the tokenised copy may reach a log)
 - [x] Prompt shielding (instruction patterns, invisible characters, bidi overrides, encoded blobs)
 - [x] Output sanitisation (markup, scripts, control and bidi characters, length cap)
 - [x] Cross-field validation (versioned YAML rule packs, six expression shapes, named checks)
-- [ ] Orkes Conductor
+- [x] Orkes Conductor (workflow with HUMAN/WAIT/FORK-JOIN/SWITCH, Python task workers)
 - [ ] Document Intelligence
 - [~] RAG: chunking and vector indexing in pgvector, citations live; Azure AI Search in M6
 - [ ] AKS

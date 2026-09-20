@@ -16,6 +16,8 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.errors import register_error_handlers
 from app.db.session import SessionLocal, engine
+from app.process import start as start_process_layer
+from app.process import stop as stop_process_layer
 from app.services import assurance, pipeline
 
 logging.basicConfig(
@@ -54,7 +56,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("startup preparation failed; continuing with degraded assurance")
 
+    # The process layer last, because it may pick up cases a crash left half-finished, and
+    # those runs need the checkpointer and the policy index that were just made ready.
+    try:
+        await start_process_layer()
+    except Exception:
+        logger.exception("the process layer failed to start; cases cannot be processed")
+
     yield
+    await stop_process_layer()
     # Let in-flight pipeline runs finish before the pools close, so a case is never left
     # half-written when the container is asked to stop.
     await pipeline.drain()

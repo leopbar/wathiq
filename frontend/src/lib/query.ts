@@ -24,6 +24,7 @@ export const qk = {
   cases: (params: unknown) => ["cases", "list", params] as const,
   caseDetail: (id: string) => ["cases", "detail", id] as const,
   caseAssurance: (id: string) => ["cases", "assurance", id] as const,
+  caseProcess: (id: string) => ["cases", "process", id] as const,
   reviewQueue: (params: unknown) => ["review", "queue", params] as const,
   reviewTask: (id: string) => ["review", "task", id] as const,
   reasonCodes: ["review", "reason-codes"] as const,
@@ -39,6 +40,8 @@ export const qk = {
   assurance: ["settings", "assurance"] as const,
   users: ["settings", "users"] as const,
   audit: (params: unknown) => ["audit", params] as const,
+  processHealth: ["process", "health"] as const,
+  auditIntegrity: ["process", "audit-integrity"] as const,
   systemInfo: ["system", "info"] as const,
   systemGraph: ["system", "graph"] as const,
 };

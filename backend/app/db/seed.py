@@ -14,7 +14,7 @@ import random
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -173,7 +173,7 @@ async def seed_prompts(db: AsyncSession) -> None:
                     status=PromptStatus(version["status"]),
                     body=version["body"],
                     notes=version["notes"],
-                    eval_score=version.get("eval_score"),
+                    eval_score=None,
                     created_by=version.get("created_by", ""),
                     created_at=created,
                     approved_by=approved,
@@ -720,23 +720,37 @@ async def already_seeded(db: AsyncSession) -> bool:
     return count > 0
 
 
+# TRUNCATE, not DELETE. Since M4 the `events` table carries a trigger that rejects every
+# UPDATE and DELETE, because an audit trail that the application can edit is not an audit trail.
+# TRUNCATE does not fire row triggers, and that is the right boundary rather than a loophole:
+# it needs table-owner rights and empties the table completely, so it cannot be used to quietly
+# alter one record — which is the thing the control exists to prevent. Wiping a demo database is
+# a visible, wholesale act; rewriting history is not.
+_CLEAR_TABLES = (
+    "regression_examples",
+    "calibration_experiments",
+    "quality_cases",
+    "quality_runs",
+    "calibration_points",
+    "calibration_curves",
+    "postings",
+    "events",
+    "review_tasks",
+    "findings",
+    "extracted_fields",
+    "documents",
+    "cases",
+    "prompt_versions",
+    "prompts",
+    "document_types",
+    "users",
+)
+
+
 async def clear_all(db: AsyncSession) -> None:
-    for model in (
-        models.QualityCase,
-        models.QualityRun,
-        models.CalibrationPoint,
-        models.Event,
-        models.ReviewTask,
-        models.Finding,
-        models.ExtractedField,
-        models.Document,
-        models.Case,
-        models.PromptVersion,
-        models.Prompt,
-        models.DocumentType,
-        models.User,
-    ):
-        await db.execute(delete(model))
+    await db.execute(
+        text(f"TRUNCATE TABLE {', '.join(_CLEAR_TABLES)} RESTART IDENTITY CASCADE")
+    )
     await db.flush()
 
 

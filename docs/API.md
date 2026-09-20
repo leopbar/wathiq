@@ -211,10 +211,10 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
   top_findings: { code: string; title: string; count: number }[]; }
 ```
 
-### Quality Lab (M1: seeded read-only)
+### Quality Lab (M5: measured evaluations)
 `GET /quality/summary` → `{ bands: { band: string; label: string; passed: number; failed: number; total: number; score: number; last_run_at: string }[]; overall_score: number; }`
 `GET /quality/runs?band=` → `Page<{ id; band; started_at; finished_at; passed; failed; score; triggered_by; commit_sha }>`
-`GET /quality/runs/{id}` → `{ run, cases: { id; name; band; status:"passed"|"failed"; expected; actual; note }[] }`
+`GET /quality/runs/{id}` → `{ run, cases: { id; name; band; passed:boolean; expected; actual; note; is_regression }[] }`
 `GET /quality/calibration` →
 ```ts
 { points: { predicted: number; observed: number; n: number }[];
@@ -227,14 +227,22 @@ If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` retur
 has decided (accepted = the extractor was right, corrected = it was wrong). Refuses to fit on too
 little data, or when the fit would score worse than the raw numbers. Admin and supervisor only.
 `POST /quality/runs` → `{ band: QualityBand | "all" }` starts a run; `"all"` (the default) runs every
-band. M1 returns the most recent seeded run instead of starting a real evaluation.
+band. Returns `{ runs: QualityRun[] }` after completion; all five produces five records.
+Each run includes `provenance` (dataset, model, sample count, scope and optional prompt identity).
+The summary excludes illustrative seed data and counts permanent regression examples separately.
+`GET /quality/dataset` → authenticated ZIP with 50 PDFs and answer keys.
+`GET /quality/regressions/export` → synthetic correction snapshots for the checked-in CI fixture.
+Calibration also returns `sample_count`, `metric_scope` and MLflow `tracking` status.
 
-### Prompt Studio (M1: seeded read-only)
+### Prompt Studio
 `GET /prompts` → `{ id; key; name; latest_version; status; document_type; updated_at; versions_count }[]`
 `GET /prompts/{key}/versions` → `{ id; version; status:"draft"|"approved"|"retired"; body; notes; created_by; created_at; approved_by; approved_at; eval_score: number|null }[]`
 `GET /prompts/{key}/diff?from=&to=` → `{ from, to, unified_diff: string }`
 `POST /prompts/{key}/versions/{version}/approve` → version (admin only)
 `POST /prompts/{key}/versions/{version}/retire` → version (admin only)
+`POST /prompts/{key}/versions/{version}/evaluate` → `{ runs: QualityRun[] }` (admin, supervisor, reviewer).
+`GET /prompts/{key}/versions/{version}/evaluations` → measured history for that version.
+Live wording sensitivity is unsupported by the demo reader; see [QUALITY.md](QUALITY.md).
 
 ### Settings
 `GET /settings/document-types` → `{ id; key; name_en; name_ar; version; fields: {name,label_en,label_ar,type,required,is_critical}[]; rules_count; is_active }[]`
@@ -293,3 +301,56 @@ All errors: HTTP status + `{ "detail": "<human message>", "code": "<MACHINE_CODE
 | Settings | — | — | ✅ read | ✅ | ✅ read |
 | Audit log | ✅ own cases | ✅ | ✅ | ✅ | ✅ |
 | About | everyone | | | | |
+
+## Process layer (M4)
+`GET /process/health` → which engine is running the business process, and whether Conductor answers
+```ts
+{ configured: "auto"|"conductor"|"inprocess"; active: string; fell_back: boolean;
+  engines: { engine; reachable: boolean; detail: string; workflow_registered: boolean; url: string }[];
+  process: { workflow: string; version: number; sla_hours: number; worker_queues: string[];
+             steps: { ref; kind; label; description; queue; writes_externally; only_on_route }[];
+             mermaid: string } }
+```
+`GET /process/definition` → the workflow as the code declares it (the `process` object above)
+`POST /process/sla/sweep` → run the SLA check now; supervisor or admin only
+```ts
+{ escalated: number; note: string }
+```
+It escalates only reviews that are already past their SLA and have not been escalated before, so it
+cannot manufacture an escalation.
+
+`GET /process/audit-integrity` → whether the database is enforcing append-only on the audit trail
+```ts
+{ append_only_enforced: boolean; trigger: string; detail: string; rows: number;
+  first_seq: number|null; last_seq: number|null; oldest: string|null; newest: string|null;
+  limits: string }
+```
+`limits` states what the check does *not* prove. It is part of the response, not a footnote.
+
+`GET /cases/{id}/process` → where one case is in the business process
+```ts
+{ engine: string; workflow_name: string; workflow_version: number; workflow_id: string;
+  route: "review"|"straight_through"|""; escalated: boolean; started: boolean; finished: boolean;
+  steps: { ref; label; kind; status: "pending"|"running"|"waiting"|"completed"|"skipped"|"failed";
+           at: string|null; detail: string; writes_externally: boolean }[];
+  posting: { status: "posted"|"skipped"|"failed"; reference: string|null; customer_id: string;
+             approval_kind: "human"|"straight_through_policy"|""; approved_by: string;
+             duplicate: boolean; idempotency_key: string; note: string; posted_at: string|null;
+             simulated: true } | null;
+  live: { workflow_id; status; start_time; end_time;
+          tasks: { ref; type; status; retried }[] } | null;
+  posting_reference: string|null; note: string }
+```
+The steps are derived from the case's own append-only event log, so this view and the audit trail
+cannot disagree. `live` is Conductor's own record of the instance, present only when Conductor ran
+the case and answered.
+
+### Statuses a case moves through
+`intake → processing → [needs_review → in_review] → approved → posting → completed`, or `rejected`
+or `failed`. **`completed` means posted and sealed**, not "the graph finished" — the audit step is
+the only thing that writes it.
+
+### New error code
+`503 SERVICE_UNAVAILABLE` / `CONDUCTOR_UNAVAILABLE` — the orchestrator could not be reached. On a
+review decision it means the decision *was* recorded and the case has not moved on yet; a reviewer's
+judgement is never discarded because an orchestrator hiccupped.

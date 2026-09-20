@@ -39,6 +39,30 @@ def _ensure_test_database() -> None:
             connection.execute(f'CREATE DATABASE "{db_name}"')
 
 
+@pytest.fixture(scope="session", autouse=True)
+def process_engine_for_tests() -> Iterator[None]:
+    """Run the tests on the in-process engine, never on a live Conductor.
+
+    Two reasons. In CI there is no Conductor, so `auto` would fall back anyway and the tests
+    would be describing a different engine than the one they name. On a developer's machine
+    Conductor may well be running — and its worker is pointed at the *development* database, so
+    a case created here would be handed to a worker that cannot see it. Tests that need to
+    exercise the Conductor engine inject a fake client instead of relying on the environment.
+    """
+    previous = (settings.process_engine, settings.conductor_url, settings.sla_sweep_seconds)
+    settings.process_engine = "inprocess"
+    settings.conductor_url = ""
+    # No background sweeper: the escalation tests drive the sweep themselves, and a timer
+    # firing between two assertions is a flake waiting to happen.
+    settings.sla_sweep_seconds = 0
+    yield
+    (
+        settings.process_engine,
+        settings.conductor_url,
+        settings.sla_sweep_seconds,
+    ) = previous
+
+
 @pytest.fixture(scope="session")
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop = asyncio.new_event_loop()

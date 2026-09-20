@@ -49,6 +49,16 @@ jobs:
             -e WATHIQ_DATABASE_URL=postgresql+psycopg://wathiq:wathiq@db:5432/wathiq_test \
             --entrypoint pytest api -q
 
+      - name: Quality regression gate (five bands)
+        run: docker compose run --rm --no-deps --entrypoint python api -m app.quality.cli
+
+      - name: Prove the gate rejects broken results
+        run: |
+          set +e
+          docker compose run --rm --no-deps --entrypoint python api -m app.quality.cli --negative-control
+          result=$?
+          test "$result" -eq 1
+
       - name: Stop
         if: always()
         run: docker compose down -v

@@ -4,7 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ClipboardCheck, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
-import type { CaseAssurance, CaseDetail as CaseDetailType, ExtractedField } from "@/lib/types";
+import type {
+  CaseAssurance,
+  CaseDetail as CaseDetailType,
+  ExtractedField,
+  ProcessStatus,
+} from "@/lib/types";
 import { CASE_TYPE_LABEL } from "@/lib/constants";
 import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
 import { useAuth } from "@/auth/useAuth";
@@ -27,6 +32,17 @@ import { DocumentViewer } from "./case/DocumentViewer";
 import { FieldsPanel } from "./case/FieldsPanel";
 import { FindingsPanel } from "./case/FindingsPanel";
 import { AssurancePanel } from "./case/AssurancePanel";
+import { ProcessPanel } from "./case/ProcessPanel";
+
+/**
+ * The statuses a case can still move out of on its own.
+ *
+ * `approved` and `posting` are in the list because the business process continues after the
+ * agent graph finishes: the case still has to be posted to core banking and sealed into the
+ * audit trail. Leaving them out would stop the polling one step early and leave the screen
+ * showing "Approved" until the user reloaded.
+ */
+const MOVING_STATUSES = new Set(["intake", "processing", "approved", "posting"]);
 
 function MetaItem({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -53,7 +69,7 @@ export default function CaseDetail() {
     // polling stops and the page costs nothing.
     refetchInterval: (q) => {
       const status = q.state.data?.status;
-      return status === "intake" || status === "processing" ? 1_000 : false;
+      return status && MOVING_STATUSES.has(status) ? 1_000 : false;
     },
   });
 
@@ -62,7 +78,7 @@ export default function CaseDetail() {
   // the critic, then the investigation. A single fetch on mount would freeze whatever
   // half-finished snapshot it happened to catch, so this follows the case the same way the
   // detail query does and stops as soon as the run settles.
-  const caseIsMoving = caseData?.status === "intake" || caseData?.status === "processing";
+  const caseIsMoving = Boolean(caseData && MOVING_STATUSES.has(caseData.status));
 
   // The evidence behind the case: guardrails, workers, critic, investigation, tool calls.
   // Read from the agent's checkpoint, so it only exists once the case has actually run.
@@ -74,14 +90,29 @@ export default function CaseDetail() {
     refetchInterval: caseIsMoving ? 1_000 : false,
   });
 
+  // Where the case is in the business process. Built from the case's own event log, so it
+  // follows the case for as long as the case is moving — and the process keeps moving after the
+  // graph finishes, through posting and the audit seal.
+  const processQuery = useQuery({
+    queryKey: qk.caseProcess(id),
+    queryFn: () => apiFetch<ProcessStatus>(`/cases/${id}/process`),
+    enabled: Boolean(id),
+    staleTime: 0,
+    refetchInterval: caseIsMoving ? 1_000 : false,
+  });
+
   // Polling stops the moment the case settles, and the last poll before that almost always
   // caught the checkpoint one node short — leaving the panel showing "0 steps" for a run that
   // did six. One refetch on every status change closes that gap.
   const caseStatus = caseData?.status;
   const refetchAssurance = assuranceQuery.refetch;
+  const refetchProcess = processQuery.refetch;
   useEffect(() => {
-    if (caseStatus) void refetchAssurance();
-  }, [caseStatus, refetchAssurance]);
+    if (caseStatus) {
+      void refetchAssurance();
+      void refetchProcess();
+    }
+  }, [caseStatus, refetchAssurance, refetchProcess]);
 
   useEffect(() => {
     if (caseData && !selectedDocumentId && caseData.documents.length > 0) {
@@ -257,6 +288,36 @@ export default function CaseDetail() {
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin">
                     <FindingsPanel findings={detail.findings} />
+                  </div>
+                ),
+              },
+              {
+                value: "process",
+                label: "Process",
+                badge: processQuery.data ? (
+                  processQuery.data.finished ? (
+                    <Badge tone="success">finished</Badge>
+                  ) : (
+                    <Badge tone="neutral">
+                      {processQuery.data.steps.filter((step) => step.status === "completed").length}
+                      /{processQuery.data.steps.length}
+                    </Badge>
+                  )
+                ) : undefined,
+                content: (
+                  <div className="h-full overflow-y-auto scroll-thin">
+                    {processQuery.data ? (
+                      <ProcessPanel status={processQuery.data} />
+                    ) : (
+                      <EmptyState
+                        title={processQuery.isPending ? "Loading…" : "The process view is unavailable"}
+                        description={
+                          processQuery.isPending
+                            ? "Reading this case's process record."
+                            : "The process layer could not be asked about this case."
+                        }
+                      />
+                    )}
                   </div>
                 ),
               },

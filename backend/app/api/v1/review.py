@@ -15,7 +15,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import REVIEW_ROLES, CurrentUser, DbSession, client_ip, require_roles
-from app.core.errors import ConflictError, NotFoundError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.db import models
 from app.db.enums import (
     CaseStatus,
@@ -25,10 +30,13 @@ from app.db.enums import (
     ReviewStatus,
     Role,
 )
+from app.process import engine_for_case
+from app.process.conductor_client import ConductorError
+from app.quality.service import capture_correction
 from app.schemas.case import ReviewTaskOut
 from app.schemas.common import Page
 from app.schemas.review import ReasonCode, ReviewDecisionRequest, ReviewTaskDetail
-from app.services import mappers, pipeline
+from app.services import mappers
 from app.services.catalog import DECISION_REASON_CODES
 from app.services.events import record_user_event
 
@@ -96,11 +104,13 @@ async def review_queue(
     if mine:
         stmt = stmt.where(models.ReviewTask.assigned_to_id == user.id)
     elif user.role == Role.reviewer:
-        # A reviewer sees unassigned work plus their own.
+        # A reviewer sees unassigned work plus their own — but not work that has been escalated
+        # to a supervisor. Without this, escalation would change a label and nothing else, and
+        # a late case would keep sitting in the same queue that was already too slow for it.
         stmt = stmt.where(
             (models.ReviewTask.assigned_to_id.is_(None))
             | (models.ReviewTask.assigned_to_id == user.id)
-        )
+        ).where(models.ReviewTask.assigned_role != Role.supervisor)
     if status_filter:
         stmt = stmt.where(models.ReviewTask.status == status_filter)
     else:
@@ -204,6 +214,7 @@ async def submit_decision(
         )
         field.corrected_value = correction.value
         field.status = FieldStatus.corrected
+        await capture_correction(db, task, field, correction.value)
 
     task.decision = payload.decision
     task.decision_reason_code = payload.reason_code
@@ -246,14 +257,27 @@ async def submit_decision(
     )
     await db.commit()
 
-    # Escalation keeps the graph parked at the review gate — a supervisor still has to answer.
-    # Every other decision resumes the graph from its checkpoint, applying the corrections.
+    # Escalation keeps the process parked at the human step — a supervisor still has to answer.
+    # Every other decision is handed to the engine that started this case, which completes the
+    # human task and lets the rest of the process run.
     if payload.decision != ReviewDecision.escalate:
-        pipeline.resume(
-            case.id,
-            payload.decision.value,
-            {c["field"]: c["to"] for c in corrections},
-        )
+        engine = await engine_for_case(db, case)
+        try:
+            await engine.submit_decision(
+                case.id,
+                payload.decision.value,
+                {c["field"]: c["to"] for c in corrections},
+            )
+        except ConductorError as exc:
+            # The decision itself is already committed, and stays committed: a reviewer's
+            # judgement is not thrown away because an orchestrator hiccupped. But the reviewer
+            # is told plainly that the case has not moved, instead of seeing a success that
+            # leaves the workflow waiting.
+            raise ServiceUnavailableError(
+                "Your decision was recorded, but the process orchestrator could not be told, "
+                f"so the case has not moved on yet. ({exc})",
+                "CONDUCTOR_UNAVAILABLE",
+            ) from exc
 
     task = await _task_with_case(db, task_id)
     open_findings = sum(1 for f in task.case.findings if f.status == FindingStatus.open)

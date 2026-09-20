@@ -37,7 +37,7 @@ MAX_REPAIRS = 2
 _DATE_ANY = re.compile(r"\b(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})\b")
 _NUMBER_ANY = re.compile(r"\b\d[\d,]*(\.\d+)?\b")
 _INLINE = re.compile(r"^\s*(?P<label>[^:]{2,60}?)\s*[:\-]\s*(?P<value>.+?)\s*$")
-_NORMALISE = re.compile(r"[^a-z0-9]+")
+_NORMALISE = re.compile(r"[^\w]+")
 
 
 def _key(text: str) -> str:

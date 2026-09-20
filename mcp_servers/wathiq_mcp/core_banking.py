@@ -8,8 +8,11 @@ back a reference number. Nothing leaves this container.
 
 Two rules are enforced here, and they are the reason this server exists as its own process:
 
-1. **Write only after approval.** `post_kyc_refresh` refuses unless it is told the case was
-   approved and by whom. A pipeline cannot post something a human has not signed off.
+1. **Write only after approval.** `post_kyc_refresh` refuses unless it is told who approved
+   the case and under what authority. `approval_kind="human"` means a named person decided;
+   `approval_kind="straight_through_policy"` means a written policy pre-authorised it because
+   nothing needed a person. Both are accepted, and the difference is stored — so a record
+   never says a human approved something no human saw.
 2. **Idempotency.** Every post carries an idempotency key. Posting the same key twice returns
    the first reference and reports `duplicate: true` instead of writing again. That is what
    makes a retry — after a crash, a timeout or a Conductor redelivery — safe.
@@ -37,6 +40,10 @@ server = build_server(
         "requires an approval and an idempotency key. Nothing here touches a real system."
     ),
 )
+
+# The authorities this system of record accepts. Anything else is refused: a made-up kind
+# would let a caller invent an approval that no policy covers.
+APPROVAL_KINDS = ("human", "straight_through_policy")
 
 # reference number → what was posted. In-memory: restarting the container forgets everything,
 # which is correct for a simulator and keeps the demo reproducible.
@@ -78,9 +85,10 @@ def get_customer(customer_id: str = "", name: str = "") -> dict[str, Any]:
 @server.tool(
     title="Post an approved KYC refresh",
     description=(
-        "Writes a KYC refresh against a simulated customer. Refuses unless the case was "
-        "approved and an approver is named. Repeating the same idempotency key returns the "
-        "original reference instead of writing twice."
+        "Writes a KYC refresh against a simulated customer. Refuses unless an approver is "
+        "named and the kind of approval is one this system accepts ('human' or "
+        "'straight_through_policy'). Repeating the same idempotency key returns the original "
+        "reference instead of writing twice."
     ),
 )
 def post_kyc_refresh(
@@ -88,6 +96,7 @@ def post_kyc_refresh(
     customer_id: str,
     idempotency_key: str,
     approved_by: str,
+    approval_kind: str = "human",
     approved_at: str = "",
     fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -104,7 +113,17 @@ def post_kyc_refresh(
             "posted": False,
             "error": "approved_by is required",
             "explanation": (
-                "This system of record only accepts a refresh that a named human approved."
+                "This system of record only accepts a refresh with a named approver — a "
+                "person, or the policy that stood in for one."
+            ),
+        }
+    if approval_kind not in APPROVAL_KINDS:
+        return {
+            "posted": False,
+            "error": f"approval_kind must be one of {', '.join(APPROVAL_KINDS)}",
+            "explanation": (
+                "The authority behind a posting is part of the record. An unrecognised one "
+                "would hide whether a person or a policy allowed it."
             ),
         }
 
@@ -128,6 +147,7 @@ def post_kyc_refresh(
         "case_id": case_id,
         "customer_id": customer_id,
         "approved_by": approved_by,
+        "approval_kind": approval_kind,
         "approved_at": approved_at or datetime.now(UTC).isoformat(),
         "posted_at": datetime.now(UTC).isoformat(),
         "field_count": len(fields or {}),

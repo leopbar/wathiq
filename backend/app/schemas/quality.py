@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db.enums import QualityBand
 from app.schemas.common import Schema
@@ -38,6 +38,7 @@ class QualityRunOut(Schema):
     score: float
     triggered_by: str
     commit_sha: str
+    provenance: dict = Field(default_factory=dict)
 
 
 class QualityCaseOut(Schema):
@@ -82,6 +83,9 @@ class Calibration(BaseModel):
     model_version: str
     # The curve itself, so the chart can say whether the numbers on it went through one.
     curve: CurveOut
+    sample_count: int = 0
+    metric_scope: str = "Training diagnostics on reviewer outcomes, not held-out accuracy."
+    tracking: dict = {}
     method: str = "Platt scaling (one logistic curve, two parameters)"
     ground_truth: str = (
         "Every field a reviewer looked at: accepted means the extractor was right, corrected "
@@ -92,3 +96,7 @@ class Calibration(BaseModel):
 class RunRequest(BaseModel):
     # "all" runs every band; the UI offers it as the default action.
     band: QualityBand | Literal["all"] = "all"
+
+
+class RunBatch(BaseModel):
+    runs: list[QualityRunOut]
