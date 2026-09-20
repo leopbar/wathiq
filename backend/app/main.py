@@ -11,10 +11,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.agent import runner
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.errors import register_error_handlers
 from app.db.session import engine
+from app.services import pipeline
 
 logging.basicConfig(
     level=settings.log_level.upper(),
@@ -27,6 +29,10 @@ logger = logging.getLogger("wathiq")
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info("Wathiq API starting in %s mode (v%s)", settings.mode, settings.app_version)
     yield
+    # Let in-flight pipeline runs finish before the pools close, so a case is never left
+    # half-written when the container is asked to stop.
+    await pipeline.drain()
+    await runner.close_checkpointer()
     await engine.dispose()
     logger.info("Wathiq API stopped")
 

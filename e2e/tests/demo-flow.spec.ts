@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { EXPIRED_TRADE_LICENCE, VALID_TRADE_LICENCE, simplePdf } from "./pdf";
 
 /**
  * The click-through the demo script follows. If this passes, the product demo works.
@@ -121,10 +122,56 @@ test.describe("demo flow", () => {
     await page.setInputFiles('input[type="file"]', {
       name: "trade-licence.pdf",
       mimeType: "application/pdf",
-      buffer: Buffer.from(
-        "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
-      ),
+      buffer: simplePdf("Trade Licence", VALID_TRADE_LICENCE, "Synthetic demo document"),
     });
     await expect(page.getByText("trade-licence.pdf")).toBeVisible();
+  });
+
+  test("a clean document runs the whole pipeline and completes on its own", async ({ page }) => {
+    await signInAs(page, "Operations Officer");
+    await page.goto("/cases/new");
+
+    await page.getByLabel(/Customer name/i).first().fill("Playwright Holdings LLC");
+    await page.setInputFiles('input[type="file"]', {
+      name: "trade-licence.pdf",
+      mimeType: "application/pdf",
+      buffer: simplePdf("Trade Licence", VALID_TRADE_LICENCE, "Synthetic demo document"),
+    });
+    await page.getByRole("button", { name: /Create and start/i }).click();
+
+    // The stepper is fed by the SSE stream, but the run finishes in well under a second in
+    // demo mode, so the reliable assertion is the finished state, not a frame mid-flight.
+    const viewCase = page.getByRole("link", { name: /View case/i });
+    await expect(viewCase).toBeVisible({ timeout: 30_000 });
+    await viewCase.click();
+
+    await expect(page.getByText("Completed").first()).toBeVisible({ timeout: 30_000 });
+    // The values the pipeline actually read out of the PDF.
+    await expect(page.getByText("CN-4455667")).toBeVisible();
+  });
+
+  test("an expired licence stops at the review gate", async ({ page }) => {
+    await signInAs(page, "Operations Officer");
+    await page.goto("/cases/new");
+
+    await page.getByLabel(/Customer name/i).first().fill("Lapsed Ventures LLC");
+    await page.setInputFiles('input[type="file"]', {
+      name: "expired-licence.pdf",
+      mimeType: "application/pdf",
+      buffer: simplePdf("Trade Licence", EXPIRED_TRADE_LICENCE, "Synthetic demo document"),
+    });
+    await page.getByRole("button", { name: /Create and start/i }).click();
+
+    const viewCase = page.getByRole("link", { name: /View case/i });
+    await expect(viewCase).toBeVisible({ timeout: 30_000 });
+    await viewCase.click();
+
+    // The rule fired, so the graph interrupted instead of finishing.
+    await expect(page.getByText(/Needs review/i).first()).toBeVisible({ timeout: 30_000 });
+
+    // The finding itself lives behind the Findings tab; Fields is the default.
+    await page.getByRole("tab", { name: /Findings/ }).click();
+    await expect(page.getByText(/Trade licence is expired/i).first()).toBeVisible();
+    await expect(page.getByText("TL_NOT_EXPIRED")).toBeVisible();
   });
 });

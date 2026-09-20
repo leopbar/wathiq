@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import { Rocket } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { CaseDetail, StartCaseResponse } from "@/lib/types";
-import { CASE_TYPES, CASE_TYPE_LABEL, PRIORITIES, PRIORITY_LABEL } from "@/lib/constants";
+import {
+  CASE_TYPES,
+  CASE_TYPE_LABEL,
+  PIPELINE_NODES,
+  PRIORITIES,
+  PRIORITY_LABEL,
+} from "@/lib/constants";
 import { describeError } from "@/components/ErrorState";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -253,25 +259,18 @@ export default function NewCase() {
           <Card className="h-fit">
             <CardHeader
               title="What happens next"
-              description="The same seven nodes run for every case."
+              description={`The same ${PIPELINE_NODES.length} steps run for every case.`}
             />
+            {/* Driven by PIPELINE_NODES, so this list cannot describe a pipeline we do not run. */}
             <ol className="space-y-3 p-5">
-              {[
-                ["Intake", "Files are stored and hashed; nothing is sent anywhere yet."],
-                ["Guardrails", "Prompt-injection shield, PII tokenisation, content safety."],
-                ["Classify", "A supervisor node labels each document and fans work out."],
-                ["Extract", "Workers pull structured fields and self-correct on schema errors."],
-                ["Validate", "Cross-field rules run, then confidence is calibrated."],
-                ["Review gate", "Doubtful or mandatory cases interrupt for a human."],
-                ["Finalize", "Approved records post to the simulated core banking system."],
-              ].map(([title, body], index) => (
-                <li key={title} className="flex gap-3">
+              {PIPELINE_NODES.map((node, index) => (
+                <li key={node.key} className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-caption font-semibold text-ink-2 tabular">
                     {index + 1}
                   </span>
                   <div>
-                    <p className="text-small font-medium text-ink">{title}</p>
-                    <p className="text-caption text-ink-2">{body}</p>
+                    <p className="text-small font-medium text-ink">{node.label}</p>
+                    <p className="text-caption text-ink-2">{node.description}</p>
                   </div>
                 </li>
               ))}

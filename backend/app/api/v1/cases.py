@@ -35,12 +35,17 @@ from app.db.enums import (
 )
 from app.schemas.case import CaseCreate, CaseDetail, CaseStartResponse, CaseSummary, DocumentOut
 from app.schemas.common import Page
-from app.services import mappers
+from app.services import mappers, pipeline, progress
 from app.services.events import record_event, record_user_event
 from app.services.sla import default_due_at
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+
+# The SSE stream polls the event log. 1s is fast enough to look live and cheap enough to hold
+# open; 300 polls caps one connection at five minutes so a forgotten tab cannot leak a session.
+SSE_POLL_SECONDS = 1.0
+SSE_MAX_POLLS = 300
 
 ALLOWED_UPLOAD_TYPES = {
     "application/pdf": ".pdf",
@@ -291,9 +296,9 @@ async def start_case(
     db: DbSession,
     user: Annotated[models.User, Depends(require_roles(*WRITE_ROLES))],
 ) -> CaseStartResponse:
-    """Hand the case to the pipeline.
+    """Hand the case to the LangGraph pipeline.
 
-    M1 only queues the case and records the event; the LangGraph pipeline is connected in M2.
+    Returns as soon as the run is queued; the browser follows progress on the SSE stream.
     """
     case = await _load_case(db, case_id)
     if not case.documents:
@@ -318,9 +323,13 @@ async def start_case(
         label="Queued for the agent pipeline",
         actor="system",
         actor_type=ActorType.system,
-        detail={"note": "Agent pipeline is connected in milestone M2."},
+        detail={"thread_id": case.thread_id, "documents": len(case.documents)},
     )
     await db.commit()
+
+    # Commit first, then launch: the background run opens its own session and must not race
+    # the transaction that set the case to `processing`.
+    pipeline.start(case.id)
     return CaseStartResponse(thread_id=case.thread_id, status=case.status)
 
 
@@ -331,11 +340,18 @@ async def case_events(
     """Server-Sent Events stream of pipeline progress.
 
     `EventSource` cannot set an Authorization header, so this endpoint also accepts `?token=`
-    (see `get_current_user_browser`). For now it replays timeline rows as they appear; in M2 the
-    graph pushes real node-by-node progress through the same stream.
+    (see `get_current_user_browser`). Each new row in the append-only event log becomes a
+    stepper frame, translated by `services.progress` so the UI's steps and the audit trail's
+    vocabulary stay in step.
+
+    The stream closes when the case stops moving — finished, failed, or parked at the review
+    gate waiting for a person. A parked case can wait hours, so holding the connection open
+    for it would be a leak, not a feature.
     """
     case = await _load_case(db, case_id)
     known_seq = 0
+    # Anything other than these means the pipeline is no longer advancing on its own.
+    moving = {CaseStatus.intake, CaseStatus.processing}
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         nonlocal known_seq
@@ -343,33 +359,48 @@ async def case_events(
             "event": "hello",
             "data": json.dumps({"case_id": str(case.id), "thread_id": case.thread_id}),
         }
-        for _ in range(60):
+        for _ in range(SSE_MAX_POLLS):
             if await request.is_disconnected():
                 break
             rows = (
-                await db.execute(
-                    select(models.Event)
-                    .where(models.Event.case_id == case.id, models.Event.seq > known_seq)
-                    .order_by(models.Event.seq.asc())
+                (
+                    await db.execute(
+                        select(models.Event)
+                        .where(models.Event.case_id == case.id, models.Event.seq > known_seq)
+                        .order_by(models.Event.seq.asc())
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for event in rows:
                 known_seq = event.seq
+                frame = progress.frame_for(event.action)
+                if frame is None:
+                    continue  # a timeline entry that is not a pipeline step
                 yield {
                     "event": "progress",
                     "data": json.dumps(
                         {
-                            "node": event.action,
-                            "status": "done",
+                            "node": frame.node,
+                            "status": frame.status,
+                            "percent": frame.percent,
                             "message": event.label,
                             "at": event.created_at.isoformat(),
                         }
                     ),
                 }
+
+            # Re-read the status rather than trusting the object loaded before the loop: the
+            # pipeline runs in a different session and this one would never see its writes.
+            status = (
+                await db.execute(select(models.Case.status).where(models.Case.id == case.id))
+            ).scalar_one()
             await db.commit()  # release the snapshot so new rows become visible
-            if case.status not in (CaseStatus.intake, CaseStatus.processing):
+            if status not in moving:
                 break
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(SSE_POLL_SECONDS)
+
         yield {"event": "done", "data": json.dumps({"case_id": str(case.id)})}
 
     return EventSourceResponse(stream(), ping=15000)

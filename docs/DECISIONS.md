@@ -193,3 +193,60 @@ chart components with `React.lazy`, which should cut the initial bundle by rough
 **Why:** One-click role switching must go through the same authentication and audit path as a real
 login, so the audit trail is complete. The endpoint returns 404 when `WATHIQ_MODE=azure`, so the
 shortcut cannot exist in a real deployment.
+
+### 27. The demo extractor reads labels, it does not call a model
+**Why:** Demo mode has to work with no network and no keys, and the Quality Lab in M5 needs a
+baseline that gives the same answer every time. A deterministic label-and-value reader does both.
+It also cannot hallucinate: if a value is not in the document, the field comes back empty with
+confidence 0 rather than invented.
+**Not that:** a small local model — more to install, slower, and a demo that sometimes disagrees
+with itself is worse than one that is obviously simple.
+**Honesty:** the UI and `integrations()` both label this as a demo extractor. Azure mode swaps in a
+Foundry call with structured outputs behind the same interface in M6; the Pydantic validation of
+the result does not change.
+
+### 28. Confidence is a formula we can explain, not a random number
+**Why:** A reviewer will ask "why is this 62%?". The demo extractor scores a value from things you
+can point at — replacement characters from a bad read, a suspiciously short value, a mixed
+letters-and-digits reference number that is typically the most reliable field on the page. Seeding
+a random number generator would look the same on screen and mean nothing.
+**Consequence:** `calibrated_confidence` currently equals the raw score. Calibration needs a labelled
+outcome set, which is M3/M5 work, and showing a "calibrated" number that has not been calibrated
+would be a lie.
+
+### 29. The review task is created by the runner, not inside the review-gate node
+**Why:** LangGraph re-runs an interrupted node from its first line when the graph resumes. Anything
+the node wrote before `interrupt()` would therefore be written a second time — here, a duplicate
+review task for every reviewer decision. The node computes and interrupts; the runner, which is
+outside the graph and runs exactly once per pause, creates the task rows.
+**Rule to keep:** a node that can interrupt must be side-effect-free above the `interrupt()` call.
+
+### 30. Findings carry their status across a resume
+**Why:** The rules re-run when the graph resumes, and `_persist` replaces the findings for a case.
+A finding a reviewer had just resolved came back as `open`, silently undoing their decision. The
+previous status is now carried over by rule code.
+**Worth remembering:** "replace everything the graph produced" is a clean rule for data the graph
+owns, but findings are shared — the graph proposes them and a human dispositions them.
+
+### 31. The pipeline runs as a background task, for now
+**Why:** An upload request should not block until the pipeline finishes, and the browser already
+follows progress over SSE. `asyncio.create_task` with a strong reference and a done-callback that
+logs failures is enough for a single API process.
+**Its limit, stated plainly:** if the container dies mid-run, that run is lost — the LangGraph
+checkpoint survives, but nothing restarts it. M4 replaces this with a Conductor worker, which is
+what makes the run durable. The interface (`pipeline.start` / `pipeline.resume`) stays the same.
+
+### 32. Punctuation is deleted, not spaced, when comparing names
+**Why:** The cross-document rule scored "Al Noor Trading LLC" against "Al Noor Trading L.L.C." at
+0.5 similarity and raised a mismatch on two identical names. Replacing punctuation with a space
+split `L.L.C.` into three tokens. Deleting it instead keeps it as one.
+**Worth remembering:** UAE company names use both spellings constantly; a normaliser that looks
+obviously correct in English can be wrong for the data it will actually see.
+
+### 33. The About screen draws the graph that actually runs
+**Why:** A diagram that describes a design rather than the code drifts within a week, and the whole
+point of the screen is to explain the system truthfully. `/system/graph` now returns the diagram
+from the graph module and reports `source: "live"`.
+**Same rule elsewhere:** the New case "what happens next" panel and the pipeline stepper both read
+one step list, mirrored on the backend in `services/progress.py`. Guardrails are deliberately absent
+from it until M3 builds them — a step that never lights up reads as a bug, not as honesty.

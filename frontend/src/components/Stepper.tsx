@@ -1,7 +1,12 @@
-import { Check, CircleDashed, Loader2, X } from "lucide-react";
+import { Check, CircleDashed, Loader2, PauseCircle, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export type StepState = "pending" | "active" | "done" | "failed";
+/**
+ * `waiting` is not the same as `active`: the graph is parked at the review gate and nothing
+ * will move until a person answers. Showing a spinner there would suggest the system is busy
+ * when it is actually waiting on the user.
+ */
+export type StepState = "pending" | "active" | "waiting" | "done" | "failed";
 
 export interface StepperStep {
   key: string;
@@ -11,9 +16,10 @@ export interface StepperStep {
   message?: string;
 }
 
-const ICON = {
+const ICON: Record<StepState, typeof Check> = {
   pending: CircleDashed,
   active: Loader2,
+  waiting: PauseCircle,
   done: Check,
   failed: X,
 };
@@ -21,6 +27,7 @@ const ICON = {
 const RING: Record<StepState, string> = {
   pending: "border-border bg-surface text-ink-2/70",
   active: "border-primary bg-primary-soft text-primary",
+  waiting: "border-warning bg-warning-soft text-warning",
   done: "border-success bg-success-soft text-success",
   failed: "border-danger bg-danger-soft text-danger",
 };

@@ -47,6 +47,8 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
+      # Mounted so `docker compose run --rm api pytest` picks up edits without a rebuild.
+      - ./backend/tests:/app/tests
       - api-storage:/app/storage
     depends_on:
       db:

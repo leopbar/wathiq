@@ -18,6 +18,8 @@ dependencies = [
     "sse-starlette>=2.1",
     "pyyaml>=6.0",
     "httpx>=0.28",
+    "langgraph>=0.6",
+    "langgraph-checkpoint-postgres>=2.0",
 ]
 
 [dependency-groups]
