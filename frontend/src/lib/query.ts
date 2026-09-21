@@ -37,6 +37,8 @@ export const qk = {
   promptDiff: (key: string, from: string, to: string) => ["prompts", "diff", key, from, to] as const,
   documentTypes: ["settings", "document-types"] as const,
   integrations: ["settings", "integrations"] as const,
+  azure: ["settings", "azure"] as const,
+  authConfig: ["auth", "config"] as const,
   assurance: ["settings", "assurance"] as const,
   users: ["settings", "users"] as const,
   audit: (params: unknown) => ["audit", params] as const,

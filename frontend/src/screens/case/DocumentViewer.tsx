@@ -24,6 +24,7 @@ export function DocumentViewer({
 }) {
   const [zoom, setZoom] = useState(1);
   const [page, setPage] = useState(1);
+  const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
 
   if (!document) {
     return (
@@ -39,6 +40,11 @@ export function DocumentViewer({
 
   const bbox = highlighted?.bbox ?? null;
   const currentPage = Math.min(Math.max(page, 1), Math.max(document.page_count, 1));
+  const isImage = document.mime_type.startsWith("image/");
+  const previewUrl = withToken(document.preview_url);
+  const previewAspectRatio = isImage
+    ? (imageRatios[document.id] ?? 1)
+    : "1 / 1.414";
 
   return (
     <div className={className}>
@@ -98,7 +104,7 @@ export function DocumentViewer({
           </Button>
           <Tooltip content="Open the raw file in a new tab">
             <a
-              href={withToken(document.preview_url)}
+              href={previewUrl}
               target="_blank"
               rel="noreferrer"
               aria-label="Open document in a new tab"
@@ -113,14 +119,32 @@ export function DocumentViewer({
       <div className="relative flex-1 overflow-auto scroll-thin bg-surface-2/40 p-3">
         <div
           className="relative mx-auto bg-surface shadow-card"
-          style={{ width: `${Math.round(zoom * 100)}%`, aspectRatio: "1 / 1.414" }}
+          style={{ width: `${Math.round(zoom * 100)}%`, aspectRatio: previewAspectRatio }}
         >
-          <iframe
-            key={`${document.id}-${currentPage}`}
-            src={`${withToken(document.preview_url)}#page=${currentPage}&view=FitH`}
-            title={`Preview of ${document.filename}`}
-            className="absolute inset-0 h-full w-full rounded-[var(--radius-sm)] border-0"
-          />
+          {isImage ? (
+            <img
+              key={document.id}
+              src={previewUrl}
+              alt={`Preview of ${document.filename}`}
+              className="absolute inset-0 h-full w-full rounded-[var(--radius-sm)] object-contain"
+              onLoad={(event) => {
+                const { naturalWidth, naturalHeight } = event.currentTarget;
+                if (naturalWidth > 0 && naturalHeight > 0) {
+                  setImageRatios((ratios) => ({
+                    ...ratios,
+                    [document.id]: naturalWidth / naturalHeight,
+                  }));
+                }
+              }}
+            />
+          ) : (
+            <iframe
+              key={`${document.id}-${currentPage}`}
+              src={`${previewUrl}#page=${currentPage}&view=FitH`}
+              title={`Preview of ${document.filename}`}
+              className="absolute inset-0 h-full w-full rounded-[var(--radius-sm)] border-0"
+            />
+          )}
           {bbox ? (
             <div
               className="pointer-events-none absolute rounded-[3px] border-2 border-warning bg-warning/15 shadow-[0_0_0_9999px_rgba(11,18,32,0.18)]"

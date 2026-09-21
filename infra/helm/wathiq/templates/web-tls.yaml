@@ -1,0 +1,46 @@
+{{- if .Values.web.tls.enabled }}
+{{- $hostname := required "web.tls.hostname is required when web.tls.enabled=true" .Values.web.tls.hostname }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wathiq.fullname" . }}-web-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+data:
+  Caddyfile: |
+    {
+        admin off
+        http_port 8081
+        https_port 8443
+        servers {
+            protocols h1 h2
+        }
+    }
+
+    http:// {
+        redir https://{{ $hostname }}{uri} permanent
+    }
+
+    {{ $hostname }} {
+        encode zstd gzip
+        header Strict-Transport-Security "max-age=31536000"
+        reverse_proxy 127.0.0.1:{{ .Values.web.port }}
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "wathiq.fullname" . }}-web-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.web.tls.storageSize }}
+{{- end }}

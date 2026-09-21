@@ -2,15 +2,33 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M5 demo implementation is built on `codex/m5-quality-lab` (based on M4 commit
-`463e086`). This milestone commit records the verified demo implementation. No M5 push has been made.
-235 backend tests passed in the full suite, plus the added Brier regression test (15 focused M5 tests).
-26 MCP tests and 33 Playwright tests pass; ruff, frontend lint, typecheck and production build are clean. The five-band
-CI gate passes locally and negative controls reject broken results. MLflow recorded a real fit on 93
-reviewed fields. Both incremental and fresh-database Alembic migrations passed.
-**Remaining:** push/PR approval. Gitleaks found no secrets; UI and Arabic PDF screenshots reviewed.
-**Explicit M6 dependency:** the prompt-sensitivity harness is implemented and tested, but the demo
-reader ignores wording. Live model sensitivity is unsupported, not scored as a success.
+**Current status:** M6 (Azure mode) is built on `m6-azure-mode`, branched from `main` at the M5
+merge (`138181f`). All eight Azure adapters are implemented behind the interfaces that already
+existed, with the infrastructure-as-code given the most depth: 11 Bicep modules at resource-group
+scope, a Helm chart covering six always-on workloads plus the conditional Conductor worker, and a
+guarded teardown.
+
+**Verified:** 291 backend tests, 26 MCP, 33 Playwright; ruff, eslint, tsc and the production
+build clean. Bicep compiles with zero warnings; the default in-process Helm release renders 16
+resources (15 schema-valid, 1 CRD supplied by the AKS add-on); shellcheck clean. A test proves
+demo mode loads no Azure SDK.
+
+**Protecting the existing system:** this subscription runs a live application in `filingsiq-rg`.
+Wathiq never touches it — resource-group scope, an exact-match allow-list in both scripts, its own
+copy of every service, and model SKUs chosen against *measured* quota so they draw on pools the
+existing system does not use. The teardown guard is tested against `filingsiq-rg` and refuses it.
+
+**Live now:** `rg-wathiq-dev` is deployed on AKS. Public login, a complete real-Azure case
+(`WTQ-2026-0031`), checkpoint assurance, and an ADLS SAS document fetch all passed. The resource
+group remains intentionally live because development is continuing in Azure.
+
+**Remaining:** teardown is deferred until Azure development finishes; then commit/push/PR approval.
+
+**Two things deliberately not claimed.** Azure AI Search is written and tested but **not
+deployed** — the free tier belongs to the other system and Basic costs ~USD 74/month to replace a
+working pgvector retriever. Entra **browser sign-in** is not built: the API validates Entra tokens
+today and that is tested, but the OIDC redirect leg needs an app registration this demo does not
+have, and the login screen says so instead of showing a button that cannot finish.
 
 ## Section 0 — Setup
 - [x] Environment checked (Windows 11, 16 GB RAM, Docker Desktop, Git, GitHub CLI)
@@ -252,11 +270,256 @@ not the developer's live database. No real customer data belongs in that export.
 - The worker inherited an HTTP healthcheck although it is a queue-polling process with no HTTP server.
 
 ## M6 — Azure mode
-- [ ] Connect the sensitivity harness to Foundry and run actual prompt-wording experiments
-- [ ] Foundry / Document Intelligence / Content Safety / AI Search / ADLS / Azure ML / Monitor
-- [ ] Entra ID (MSAL) auth
-- [ ] Bicep + Helm + teardown script
-- [ ] Milestone checks + docs + commit/PR
+
+Every item is behind an interface that already existed in M1–M5 and is switched on by
+`WATHIQ_MODE=azure` **plus that service's own endpoint**. An empty endpoint is a normal state, not
+a broken one: the demo implementation keeps running and Settings → Azure names which one answered.
+Demo mode is unchanged and still loads no Azure SDK at all — asserted by a test, not assumed.
+
+### A — Model provider (Azure AI Foundry)
+- [x] `FoundryExtractor` implementing the same `ExtractorBackend` as `DemoExtractor`
+- [x] Structured outputs in **strict mode**, using the very schema `agent/schema.py` already built
+      the Pydantic validator from — one definition, two jobs, proven equal by a test
+- [x] The model returns values only; each one is then **looked up in the document**. A value that
+      cannot be found carries no source line and zero confidence, so the grounding signal collapses
+      and the field goes to a person (DECISIONS #66)
+- [x] The registry's prompt body and the few-shot examples now reach the model. The supervisor
+      loads the pinned prompt version once per case; workers no longer touch the database
+- [x] Truncation (`finish_reason=length`) and content-filter refusals raise rather than parsing
+      half an object
+- [x] `FoundryEmbedder` asking for 256 dimensions, so it drops into the existing `vector(256)`
+      column with no migration, renormalised because a shortened vector is no longer unit length
+- [x] Azure Prompt Shields and Content Safety **combined with** the local detectors, never
+      replacing them; either one flagging wins, and "could not check" is a recorded third state
+- [~] Sensitivity harness: the interface now accepts a real prompt, so a Foundry-backed predictor
+      can be passed in. **No wording-sensitivity score is published** — that needs a measured run
+      against the live model, which has not been done. Demo mode still says "unsupported"
+
+### B — Document Intelligence
+- [x] `DocumentIntelligenceOcr` implementing the existing `OcrBackend`, calling `prebuilt-layout`
+- [x] **Bounding boxes, end to end at last.** `OcrResult` carries `line_boxes`; `agent/geometry.py`
+      joins a value to the line it was printed on by *text*, not line number (the guardrails rewrite
+      the text between OCR and extraction); the worker writes the box; the viewer already drew it
+- [x] It never guesses: no match means `bbox = None` and the UI goes on saying "no source region"
+- [x] A value wrapped across lines is unioned from a distinctive seed plus *adjacent* fragments —
+      found by a test that caught the first version dropping "LLC"
+- [x] Sixth confidence signal `read`: how sure the engine was of *this value's* characters, as
+      distinct from the page. `combine()` re-normalises, so demo scores are bit-identical to M5
+- [x] Demo OCR stays the default and reports no geometry rather than inventing any
+
+### C — Azure AI Search (RAG)
+- [x] `azure/search.py`: index creation, hybrid keyword + vector query, citation lookup by filter
+- [x] The fused rank score is **not** treated as a cosine similarity; the cosine is recomputed
+- [~] **Deliberately not deployed.** The free tier in this subscription belongs to another system,
+      and Basic is ~USD 74/month to replace a pgvector retriever that already returns real
+      citations. `deployAiSearch=false`; pgvector stays live (DECISIONS #71)
+
+### D — ADLS Gen2 (storage)
+- [x] `AdlsStorage` implementing the existing `StorageBackend`, hierarchical namespace
+- [x] Short-lived read-only SAS signed with a **user delegation key**, so the signature is
+      traceable to an identity rather than to an anonymous account key
+- [x] `StorageBackend.signed_url()` returns `None` for a local folder — the honest answer — and the
+      document endpoint then streams the bytes exactly as it has since M1
+- [x] Local folder stays the default
+
+### E — Azure ML (calibration)
+- [x] `azure/ml.py` submits the fit as a command job, polls with an enforceable timeout and reads
+      `curve.json` back
+- [x] `app/quality/fit_job.py` is the job entry point and calls the **same** `calibration.fit()` —
+      no second implementation of Platt scaling anywhere
+- [x] The "do no harm" guard is applied to the remote result too
+- [x] The workspace's own MLflow URI is exposed, so M5's tracking moves to Azure with no code change
+- [x] Local fitting stays the default
+
+### F — Azure Monitor (observability)
+- [x] OpenTelemetry export, configured at startup, off without a connection string
+- [x] `span()` is a no-op context manager when tracing is off, so no call site has to ask
+- [x] Spans cover every graph node (wrapped once where nodes are registered, so a node added later
+      is traced by construction), every MCP tool call and every guardrail decision
+- [x] Ids, verdicts and counts only — never document text or field values
+- [x] An exception inside a span is recorded and then re-raised untouched
+
+### G — Entra ID / MSAL (auth)
+- [x] Entra token validation behind the existing auth dependency: JWKS by `kid`, RS256 only,
+      audience, issuer, `exp`/`nbf` — each check is a real attack if skipped
+- [x] App roles map to Wathiq's five roles; the most privileged wins; **an unrecognised role is
+      refused, not downgraded**
+- [x] Just-in-time provisioning with an unusable password hash, and the role rewritten from the
+      token on every sign-in so removing it in Entra takes access away
+- [x] `GET /auth/config` (unauthenticated, no secrets) so the login screen can offer what exists
+- [~] **The browser sign-in flow is not built.** The API accepts an Entra bearer token today and
+      that is tested; the OIDC redirect leg needs an app registration with this origin as a
+      redirect URI, which this demo does not have. The login screen says exactly that rather than
+      showing a button that cannot finish. PROGRESS previously claimed this page already had a
+      conditional Microsoft path — it did not; that claim was wrong and is now corrected
+
+### H — Infrastructure as code
+- [x] `infra/bicep/` — 11 modules: ACR, AKS, PostgreSQL Flexible (pgvector allow-listed), ADLS
+      Gen2, Key Vault (RBAC), Log Analytics + App Insights, Azure OpenAI, Document Intelligence,
+      Content Safety, AI Search (behind a flag), Azure ML. Compiles with **zero warnings**
+- [x] **Resource-group scope**, which is the safety property: the template cannot reach outside
+      the group it is given (DECISIONS #77)
+- [x] `modules/identity.bicep` — the workload identity, its federated credential and every role it
+      holds, each with a note on why that role and not a broader one
+- [x] `infra/helm/wathiq/` — api, web and four MCP servers in the default in-process mode, plus
+      the Conductor worker only when that engine is selected; 16 resources by default. One
+      revision-scoped migration Job writes while API/worker init containers wait read-only;
+      Key Vault CSI supplies the only two secrets that exist
+- [x] `/readyz` added — `/healthz` always returned 200, so it could not serve as a readiness probe.
+      A database outage now fails readiness and never liveness
+- [x] `infra/teardown/teardown.sh` — four guards; **tested against the live `filingsiq-rg`, which
+      it refuses**; purges soft-deleted vaults and Cognitive Services accounts so names and quota
+      are released
+- [x] `infra/scripts/deploy.sh` — six steps, shellcheck-clean, containerised `helm` fallback
+- [x] `.gitattributes` forcing LF on shell scripts and Dockerfiles (CRLF breaks them in a container)
+- [x] Costed list verified against the Azure retail price API, in `infra/README.md`
+
+### Protecting the existing system
+The subscription holds a working application in `filingsiq-rg`. Nothing Wathiq does touches it:
+- [x] Resource-group scope; an exact-match allow-list in both scripts; tags required for teardown
+- [x] Wathiq creates its **own** copy of every service — no shared vault, registry or account
+- [x] **Quota checked before choosing SKUs.** Azure OpenAI capacity is per subscription, per
+      region, per model, per SKU. The existing system uses `gpt-4o` Standard and
+      `text-embedding-3-small` GlobalStandard; Wathiq deploys `gpt-4.1-mini` Standard and
+      `text-embedding-3-small` Standard — measured as empty first. This coupling is invisible in
+      any template or code review, which is why it is written down (DECISIONS #78)
+- [x] Free tiers checked: AI Search `free` and Content Safety `F0` were already taken, so Wathiq
+      uses no Search and S0 Content Safety. Document Intelligence `F0` was free and is used
+
+### Verification
+- [x] Backend: **291 passing**, ruff clean
+- [x] `tests/test_azure_geometry_flow.py` runs the **whole pipeline** with an OCR double that
+      reports geometry, and asserts the box survives OCR → state → checkpoint → worker →
+      `geometry.locate` → database → API. A third test runs the same case on the demo reader and
+      asserts there is **no** box and **no** `read` signal — so the first two prove the geometry
+      arrives *because the engine supplied it*, not because the pipeline manufactures it
+- [x] `pytest -m azure`: 8 opt-in live smoke tests, skipped unless endpoints are configured. The
+      deployed workload identity has exercised Foundry structured output, 256-dimensional
+      embeddings, Document Intelligence geometry, Prompt Shields, Content Safety, and ADLS
+      save/read/exists/user-delegation SAS against the real services
+- [x] MCP servers: 26 passing
+- [x] Playwright: 33 passing
+- [x] Frontend: eslint, tsc and the production build clean
+- [x] A test asserts demo mode imports **no** Azure SDK module, in a subprocess so the test file's
+      own imports cannot mask it
+- [x] Bicep compiles with zero warnings; Helm lints and renders; shellcheck clean on both scripts
+- [x] Live deployment to AKS and the demo flow run against real Azure services: public login,
+      upload, LangGraph pipeline, 9 extracted fields, finding, assurance checkpoint and SAS fetch
+- [ ] Teardown, and confirmation that billing has stopped
+- [ ] Commit, push and PR
+
+### Bugs found while building M6
+
+Several of these were only findable by actually deploying. They are the argument for provisioning
+rather than stopping at "the template compiles".
+
+- **AKS monitoring needs two similarly named providers.** The script registered
+  `Microsoft.OperationalInsights`, but Container Insights also requires
+  `Microsoft.OperationsManagement`; the cluster reached a failed provisioning state until the
+  latter was added.
+- **Key Vault's data plane does not inherit subscription Owner.** The deployer had the read-only
+  Secrets User role but needed Secrets Officer to create the two values. The role is now the
+  least-privileged writer and secret creation retries boundedly while RBAC propagates.
+- **ACR Tasks here is not a BuildKit builder.** Cache mounts in both Python Dockerfiles failed
+  remotely although local builds passed. The mounts were optional, so the Dockerfiles now work
+  with both builders; ACR log streaming is disabled because Windows Azure CLI crashes on Vite's
+  Unicode success mark while the remote build itself succeeds.
+- **A pre-install migration hook cannot use ordinary chart resources.** Helm runs hooks before
+  the ServiceAccount and SecretProviderClass exist. Migration is now a revision-scoped release
+  Job; API/worker init containers wait with read-only `alembic current --check-heads`, and Helm
+  waits for Jobs. The idempotent seed also runs after an upgrade, repairing interrupted installs.
+- **Default rolling updates overpack a one-node demo.** A surge briefly doubled every pod and
+  exhausted CPU. Deployments use `Recreate`, consistent with the explicitly non-HA design, and
+  the Conductor worker is absent when the in-process engine is selected instead of crash-looping.
+- **The web image knew only Compose DNS.** Nginx resolved `api`, while Helm exposes
+  `wathiq-wathiq-api`. Its config is now an environment-expanded startup template, with a writable
+  config mount over the otherwise read-only filesystem.
+- **Nginx rejected normal document uploads at 1 MB.** The API already permits 25 MB, but the web
+  proxy's smaller default returned `413 Request Entity Too Large` before FastAPI saw a passport.
+  The same startup template now has a Helm-configurable 25 MB ceiling; a 2 MB request through the
+  public load balancer reaches FastAPI in the live revision 5 deployment.
+- **ADLS served uploaded images as generic binary.** The database retained `image/jpeg`, but the
+  opaque ADLS object returned `application/octet-stream`, leaving the PDF-oriented iframe blank.
+  Signed URLs now override the response with the recorded MIME type and an inline disposition;
+  the viewer uses an image element with its natural aspect ratio so OCR boxes stay aligned. The
+  existing 3.1 MB passport in `WTQ-2026-0033` was verified live without re-uploading it.
+- **Azure providers and authentication are separate axes.** Disabling demo login whenever
+  `WATHIQ_MODE=azure` made the live environment impossible to enter before an Entra browser app
+  registration exists. Demo endpoints now follow `WATHIQ_AUTH_BACKEND`; provider mode still
+  controls only the Azure service adapters.
+
+- **`gpt-4o-mini` was refused as deprecated** by the deployment preflight — while
+  `az cognitiveservices model list` still advertised it as available with a 2027 deprecation
+  date. The list is not the authority; the preflight is. Moved to `gpt-4.1-mini` 2025-04-14, after
+  re-checking that its quota pool (`OpenAI.Standard.gpt4.1-mini`, 0 of 200) is one the existing
+  system does not use.
+- **AKS refused Kubernetes 1.31**: it has moved to Long-Term Support only, and a cluster cannot be
+  created on it without enrolling in LTS. Pinned to 1.34, which is on the standard support plan.
+  Pinning a version is still right — an automatic minor upgrade under a running demo is worse —
+  but the pin has to be checked against `az aks get-versions`, not assumed.
+- **Azure ML refuses a storage account with a hierarchical namespace** ("Cannot use storage with
+  HNS enabled"), and Wathiq's documents *need* one — the per-case ACL is why ADLS Gen2 was chosen.
+  The requirements are genuinely incompatible, so the storage module is now parameterised and
+  instantiated twice: an HNS account for documents and a plain one for the workspace. Two
+  nearly-empty LRS accounts cost about the same as one.
+- **Picking an AKS node size took three attempts, because a size must pass two unrelated
+  checks.** `Standard_B2s` is not *offered* to this subscription in eastus2 ("not allowed in your
+  subscription"). `Standard_B2ls_v2` is offered but its family's vCPU quota is **zero**
+  ("Insufficient vcpu quota requested 2, remaining 0") — a different check with a completely
+  different error. `Standard_D2s_v3` passes both. The two are easy to conflate and neither is
+  visible in a template: availability comes from `az vm list-skus`, quota from `az vm list-usage`.
+  The cost rose from ~USD 30 to ~USD 70/month for the node, which the user approved after seeing
+  that a torn-down group makes the real difference about USD 3 over a verification window.
+- **Azure ML compute has its own vCPU quota, and this subscription's is zero.** `AmlCompute` does
+  not draw on the VM quota AKS uses; a subscription that has never run an ML job starts at 0, and
+  the cluster is refused with `ClusterMinNodesExceedCoreQuota` — failing the *whole* deployment
+  for a resource the demo does not need standing. Raising it is a support request, not a template
+  change, so the compute cluster is now opt-in and off by default. The workspace still deploys, is
+  still an MLflow endpoint, and only *submitting* a job needs the quota. Stated in the docs rather
+  than quietly dropped.
+- **The SAS signer wants the path in two pieces, and said so unhelpfully.**
+  `generate_file_sas` takes `directory_name` and `file_name` as separate arguments, and requires
+  `directory_name` even at the root; passing the whole `case-id/file.pdf` as the file name raises
+  a `TypeError` about a missing argument that names nothing relevant. Worse, `signed_url` caught
+  it and returned `None`, so the viewer silently fell back to streaming bytes through the API and
+  nothing looked broken. A second live call found that Data Lake also requires a delegation key
+  in its `credential` parameter (unlike the similar Blob helper keyword). Both SDK contracts now
+  have offline regressions, and the real read-only SAS fetched the uploaded PDF successfully.
+- **Azure rate-limited the deployment itself.** After several redeploys in an hour, the
+  Cognitive Services preflight started returning `715-123420` — *"unusual activity for your
+  account"* — and refused the **whole template**, even though those accounts and both model
+  deployments already existed and were correct. It did not clear after a 12-minute wait. The fix
+  is a `deployCognitiveServices` switch: with it off, the three AI modules are skipped and their
+  endpoints are read from the existing resources with `existing` references, which are lookups
+  and cannot trigger the throttle. That turned out to be worth having anyway — iterating on the
+  cluster should not re-declare model deployments. `WATHIQ_SKIP_AI=1 ./infra/scripts/deploy.sh`.
+- **The first deploy reported success while having failed.** `deploy.sh` is `set -euo pipefail`
+  and correct; the wrapper ran it as `deploy.sh | tail -60`, so the exit code reported was
+  `tail`'s. The script was never at fault, and the lesson is about how it is invoked.
+
+- **`/healthz` could not be a readiness probe.** It reported the database as "degraded" and still
+  returned 200, so a pod that could reach nothing would have stayed in the load balancer. Split
+  into `/healthz` (liveness, always 200) and `/readyz` (503 when the database is unreachable).
+- **A wrapped value lost its last line.** The first bounding-box union collected any matching line
+  above a length floor, which dropped "LLC" — three characters, but plainly the rest of the company
+  name on the next line. Rewritten to grow outwards from a distinctive seed through *adjacent*
+  lines, which also stops a stray match elsewhere on the page joining the box.
+- **The Entra role map invented a role.** It mapped `Wathiq.Analyst` to `Role.analyst`, which does
+  not exist — the five roles are ops_officer, reviewer, supervisor, admin, auditor. It failed at
+  import, caught by calling the endpoint rather than by reading the code.
+- **`azure_services` on the mode endpoint was `not is_demo`** — a claim that Azure was in use
+  whenever the mode was set, even with no endpoint configured anywhere. It now counts services that
+  are genuinely switched on.
+- **Python wrote CRLF into the shell scripts**, which fails inside a container with `bad
+  interpreter` and never on Windows. Fixed, and `.gitattributes` now prevents it returning.
+- **DECISIONS numbering collided.** The new entries were written as #58–71 while the file already
+  ran to #62; they are renumbered #63–78 with the code references updated to match.
+- **Quality Lab inherited the live Azure providers.** Its reproducible synthetic suite called the
+  deployment factories, turning “run all” into dozens of synchronous Document Intelligence and
+  Foundry requests; Document Intelligence eventually returned 429 and the browser saw a failed
+  evaluation. Evaluation now injects deterministic OCR/extraction explicitly, while opt-in Azure
+  smoke tests remain responsible for provider health. The public all-band run completed five bands
+  and 87 checks in 17.8 seconds with no Azure AI calls.
 
 ## M7 — Polish
 - [ ] UI/UX refinement pass
@@ -274,12 +537,15 @@ not the developer's live database. No real customer data belongs in that export.
 - [x] LangGraph: HITL interrupts
 - [x] LangGraph: TypedDict state
 - [x] LangGraph: conditional edges
-- [ ] Azure AI Foundry extraction with structured outputs
+- [x] Azure AI Foundry extraction with structured outputs (strict mode, from the same Pydantic
+      schema; the model's answer is then grounded against the document rather than trusted)
 - [x] Per-field confidence from five signals, calibrated with Platt scaling on reviewer outcomes
 - [x] Pydantic validation (models built at runtime from the document type's schema; the same
       schema is the structured-output contract in M6)
 - [~] Prompt management with semver (registry, diffs, approval done; engine pinning in M2)
-- [~] Prompt correctness checks and sensitivity harness; live model sensitivity requires M6
+- [~] Prompt correctness checks and sensitivity harness. The harness now accepts a real
+      prompt and a Foundry-backed predictor, but **no wording-sensitivity score is published** —
+      that needs a measured run against the live model
 - [x] MCP servers: 4 servers, least privilege per node
 - [~] MCP servers extended for use case 2 (the same servers serve it; salary-specific tools in M7)
 - [x] Five test bands (real API/CI suites with counts, provenance and negative controls)
@@ -288,19 +554,31 @@ not the developer's live database. No real customer data belongs in that export.
 - [x] Conductor wait tasks (a WAIT task beside the human task, as the SLA timer)
 - [x] Checkpoint persistence and resumption (and crash recovery: redelivery under Conductor,
       a startup sweep under the fallback)
-- [~] Content Safety (local term-list stand-in, clearly labelled; Azure service in M6)
+- [x] Content Safety and Prompt Shields — the Azure services run **beside** the local detectors,
+      not instead of them; either one flagging sends the case to a person
 - [x] PII tokenisation (7 recognisers; only the tokenised copy may reach a log)
 - [x] Prompt shielding (instruction patterns, invisible characters, bidi overrides, encoded blobs)
 - [x] Output sanitisation (markup, scripts, control and bidi characters, length cap)
 - [x] Cross-field validation (versioned YAML rule packs, six expression shapes, named checks)
 - [x] Orkes Conductor (workflow with HUMAN/WAIT/FORK-JOIN/SWITCH, Python task workers)
-- [ ] Document Intelligence
-- [~] RAG: chunking and vector indexing in pgvector, citations live; Azure AI Search in M6
-- [ ] AKS
-- [ ] ADLS Gen2 (storage interface + local implementation done)
-- [ ] Azure ML
-- [ ] Azure Monitor
+- [x] Document Intelligence (`prebuilt-layout`): real OCR, bounding boxes finally rendered on
+      the case screen, and a sixth per-value confidence signal
+- [~] RAG: chunking, vector indexing and citations live on pgvector. The Azure AI Search
+      adapter (hybrid keyword + vector) is written and tested but **deliberately not deployed** —
+      the subscription's free tier belongs to another system (DECISIONS #71)
+- [x] AKS: Bicep for the cluster with workload identity and the Key Vault CSI driver, and a Helm
+      chart covering api, worker, web and the four MCP servers
+- [x] ADLS Gen2: hierarchical namespace, and short-lived read-only SAS links signed with a user
+      delegation key so the signature is traceable to an identity
+- [x] Azure ML: the calibration fit as a command job, calling the same `calibration.fit()` the
+      in-process path calls
+- [x] Azure Monitor: OpenTelemetry spans for every graph node, MCP tool call and guardrail
+      decision — ids and verdicts only, never document text
 - [x] Pydantic, FastAPI, TypeScript, REST APIs, JSON schema
+- [~] Microsoft Entra ID: token validation, app-role mapping and just-in-time provisioning are
+      done and tested; the browser OIDC redirect leg is not built (no app registration)
+- [x] Infrastructure as code: 11 Bicep modules at resource-group scope, a Helm chart, and a
+      teardown whose guards are tested against the subscription's live resource group
 - [x] Git, CI/CD
 - [~] Failure-mode analysis (bugs and their causes recorded per milestone; the gallery is M7)
 
@@ -309,6 +587,7 @@ Legend: `[x]` done · `[~]` partly done, finished in a later milestone · `[ ]` 
 ## Docs (section 11)
 - [x] SYSTEM_OVERVIEW.md
 - [x] ARCHITECTURE.md
+- [x] ARCHITECTURE_DECISION_RECORD.md — 22 formal ADRs with traceability to all 78 decisions
 - [x] DECISIONS.md
 - [x] GLOSSARY.md
 - [ ] DEMO_SCRIPT.md (M7, drafted after the UI is final)

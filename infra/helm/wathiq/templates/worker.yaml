@@ -1,0 +1,97 @@
+{{/*
+The process worker.
+
+It runs the *same image* as the API, with a different command. That is deliberate and it is
+one of M4's load-bearing decisions: the worker executes the same step functions and the same
+LangGraph code the API does, so there is no way for the reasoning to differ between "a case
+started from the UI" and "a case a worker picked up".
+
+**No HTTP probes.** This is a queue-polling process with no HTTP server — a bug M4 found and
+fixed after the worker inherited the API's healthcheck and was restarted forever for failing
+to answer on a port it never opened. Liveness here is a process check instead.
+
+**`terminationGracePeriodSeconds: 60`** because the worker handles SIGTERM by finishing the
+task it is holding and then stopping. Killing it mid-task would leave a Conductor task in a
+running state until its own timeout expires.
+*/}}
+{{- if eq .Values.wathiq.processEngine "conductor" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wathiq.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wathiq.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "wathiq.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "wathiq.env" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      # The worker finishes the task in its hand before exiting.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        {{- include "wathiq.waitForMigration" . | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "app.process.worker_main"]
+          env:
+            {{- include "wathiq.env" . | nindent 12 }}
+          # A process check, not an HTTP one: this container serves no port.
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import sys; sys.exit(0)"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- include "wathiq.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage
+              mountPath: /app/storage
+            {{- if .Values.keyVault.enabled }}
+            - name: secrets-store
+              mountPath: /mnt/secrets
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: storage
+          emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "wathiq.fullname" . }}-kv
+        {{- end }}
+{{- end }}

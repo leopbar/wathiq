@@ -1,0 +1,53 @@
+{{/*
+Optional ingress.
+
+Off by default: the web Service is a LoadBalancer, which gives the demo one public IP and
+costs nothing beyond it. Turn this on when there is a real hostname and certificate — an
+ingress with no TLS is a downgrade, not an upgrade.
+
+Two paths, and the order matters. Kubernetes evaluates ingress rules by specificity, so
+`/api` reaching the API and everything else reaching the front end works — but making the
+front end's rule `Prefix: /` and putting it second keeps the intent readable rather than
+relying on the reader knowing the precedence rules.
+*/}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "wathiq.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+  annotations:
+    # SSE: the case screen holds an open connection for the length of a run, so the usual
+    # 60-second proxy read timeout would cut the live pipeline view off mid-case.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ required "ingress.host is required when TLS is enabled" .Values.ingress.host | quote }}
+      secretName: {{ required "ingress.tls.secretName is required when TLS is enabled" .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ required "ingress.host must be set when ingress is enabled" .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wathiq.fullname" . }}-api
+                port:
+                  number: {{ .Values.api.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "wathiq.fullname" . }}-web
+                port:
+                  number: 80
+{{- end }}

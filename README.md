@@ -37,7 +37,7 @@ Then open **http://localhost:5173** and click any role on the sign-in screen.
 | Health check | http://localhost:8000/healthz |
 | Optional MLflow (`docker compose --profile ml up -d --build mlflow`) | http://localhost:5001 |
 
-**Demo sign-in (demo mode only).** One click per role, no password needed. If you prefer to type
+**Demo sign-in (local auth backend only).** One click per role, no password needed. If you prefer to type
 one, every demo account uses `Wathiq!Demo2026`.
 
 | Role | Email | Sees |
@@ -48,8 +48,8 @@ one, every demo account uses `Wathiq!Demo2026`.
 | Admin | `rashid.belhoul@wathiq.demo` | Document types, prompts, rules, users, integrations |
 | Auditor | `fatima.darwish@wathiq.demo` | Read-only cases and the full audit trail |
 
-These accounts exist **only** when `WATHIQ_MODE=demo`. In Azure mode the endpoint returns 404 and
-sign-in goes through Microsoft Entra ID.
+These accounts exist when `WATHIQ_AUTH_BACKEND=demo`, including the temporary Azure-hosted demo.
+Set `WATHIQ_AUTH_BACKEND=entra` for Microsoft Entra ID; then the demo endpoint returns 404.
 
 ---
 
@@ -132,18 +132,43 @@ live inside the app on the **About the system** screen.
 
 ## Two modes, switched by configuration only
 
-| | DEMO (default) | AZURE |
-|---|---|---|
-| Model | Deterministic FakeModel — works offline | Azure AI Foundry deployment |
-| OCR | Built-in demo OCR | Azure AI Document Intelligence |
-| Safety | Local heuristic prompt shield | Azure AI Content Safety + Prompt Shields |
-| Retrieval | pgvector | Azure AI Search |
-| Storage | Local folder | ADLS Gen2 |
-| Sign-in | Local accounts + JWT | Microsoft Entra ID (OIDC) |
-| Telemetry | Console + per-case timeline | Azure Monitor (OpenTelemetry) |
+| | DEMO (default) | AZURE | Switched on by |
+|---|---|---|---|
+| Model | Deterministic demo extractor — works offline | Azure AI Foundry, structured outputs | `WATHIQ_AZURE_OPENAI_ENDPOINT` |
+| OCR | Reads the PDF text layer, no coordinates | Document Intelligence — real OCR **with bounding boxes** | `WATHIQ_AZURE_DOC_INTELLIGENCE_ENDPOINT` |
+| Safety | Local pattern set and term list | Azure Prompt Shields + Content Safety, **combined with** the local ones | `WATHIQ_AZURE_CONTENT_SAFETY_ENDPOINT` |
+| Retrieval | pgvector | Azure AI Search (hybrid) — *written, not deployed* | `WATHIQ_AZURE_SEARCH_ENDPOINT` |
+| Storage | Local folder | ADLS Gen2 + short-lived SAS | `WATHIQ_AZURE_STORAGE_ACCOUNT_URL` |
+| Calibration | Fitted in the API process | Azure ML command job | `WATHIQ_AZURE_ML_WORKSPACE` |
+| Telemetry | Console + per-case timeline | Azure Monitor (OpenTelemetry) — *additional to* the audit trail | `WATHIQ_AZURE_MONITOR_CONNECTION_STRING` |
+| Sign-in | Local accounts + JWT | Microsoft Entra ID token validation | `WATHIQ_AUTH_BACKEND=entra` |
 
-Switch with `WATHIQ_MODE=azure` and the keys in `.env` (see `.env.example`). The role model, the
-screens and the API are identical in both.
+**Each service is switched on by its own endpoint, not by the mode.** `WATHIQ_MODE=azure` is the
+master switch, but an empty endpoint means that one service keeps its demo implementation and the
+Settings → Azure tab names which one answered. "Real OCR, demo extractor" is a legitimate state,
+and a sensible way to start — it isolates one variable. The role model, the screens and the API are
+identical throughout.
+
+A service that is *configured and then fails* is a different matter: it raises. Falling back to the
+demo reader when Document Intelligence returns a 500 would produce a case that looks normal,
+carries confident-looking numbers, and was read by something nobody chose.
+
+Demo mode loads **no Azure SDK at all** — asserted by a test in a subprocess, not assumed.
+
+### Running it on Azure
+
+```bash
+./infra/scripts/deploy.sh rg-wathiq-dev eastus2   # ~25 min, about USD 100/month
+./infra/teardown/teardown.sh rg-wathiq-dev        # when you are finished
+```
+
+`infra/README.md` has the costed resource list (verified against the Azure retail price API), the
+architecture, and what this deployment deliberately is **not** — no private endpoint for
+PostgreSQL, no NetworkPolicy, no high availability.
+
+The safety rule is enforced rather than remembered: Bicep deploys at **resource-group scope**, so
+it cannot reach outside the group it is given, and both scripts check the group name against an
+exact-match allow-list. Pointing the teardown at another resource group is refused.
 
 ### Honesty about what is simulated
 `Simulated` is shown in the UI, the API and here. These are real services with real contracts that
@@ -266,6 +291,7 @@ CI runs all of the above in containers on every push and pull request, plus a gi
 |---|---|
 | [docs/SYSTEM_OVERVIEW.md](docs/SYSTEM_OVERVIEW.md) | The problem, the solution, the users — one page |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Five diagrams with explanations |
+| [docs/ARCHITECTURE_DECISION_RECORD.md](docs/ARCHITECTURE_DECISION_RECORD.md) | Formal, consolidated ADR compendium for the complete system |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Why this, not that |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Every term in one sentence, with an everyday analogy |
 | [docs/API.md](docs/API.md) | The API contract |

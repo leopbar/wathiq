@@ -28,6 +28,7 @@ from typing import Any
 
 from mcp import Client
 
+from app.azure import monitor
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,12 @@ class ToolBroker:
             return call
 
         try:
-            payload = await self._invoke(url, tool, arguments)
+            # One span per tool call (M6). The server and tool are recorded, the arguments are
+            # not: a tool call carries customer values, and a trace leaves the building.
+            with monitor.span(
+                f"mcp.{server}.{tool}", tool_server=server, tool_name=tool, node=self.node
+            ):
+                payload = await self._invoke(url, tool, arguments)
             call = ToolCall(
                 server=server,
                 tool=tool,

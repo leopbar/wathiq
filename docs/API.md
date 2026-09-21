@@ -145,11 +145,20 @@ interface ReviewTask {
 |---|---|---|---|
 | POST | `/auth/login` | `{email, password}` | `{access_token, token_type:"bearer", user: User}` |
 | GET | `/auth/me` | — | `User` |
-| GET | `/auth/demo-users` | — | `DemoUser[]` (demo mode only, no auth) |
-| POST | `/auth/demo-login` | `{role: Role}` | same as login (demo mode only) |
+| GET | `/auth/config` | — | `{backend, demo_accounts_available, entra:{...}}` — **no auth**; the login screen reads it to decide which sign-in methods to offer. A tenant id and a client id are public identifiers; no secret is included |
+| GET | `/auth/demo-users` | — | `DemoUser[]` (local demo auth only, no auth) |
+| POST | `/auth/demo-login` | `{role: Role}` | same as login (local demo auth only) |
 
 `DemoUser = { role, email, full_name, title, description }` — used for the one-click cards on Login.
-If mode is `azure`, `/auth/demo-users` returns `[]` and `/auth/demo-login` returns 404.
+Provider mode and authentication are independent. An Azure-service deployment may use
+`WATHIQ_AUTH_BACKEND=demo` for a controlled demo before an Entra browser app registration exists.
+With `WATHIQ_AUTH_BACKEND=entra`, `/auth/demo-users` returns `[]` and `/auth/demo-login` returns 404.
+
+With `WATHIQ_AUTH_BACKEND=entra` every endpoint accepts a **Microsoft Entra ID** access token as
+the bearer token instead of a Wathiq-issued one. It is validated against the tenant's JWKS
+(RS256 only, audience, issuer, expiry), the app role in the token decides the Wathiq role, and a
+user who has never signed in before is created on the spot. A token carrying no recognised Wathiq
+app role is rejected rather than downgraded. (M6, DECISIONS #73)
 
 ### Cases
 | Method | Path | Notes |
@@ -248,7 +257,16 @@ Live wording sensitivity is unsupported by the demo reader; see [QUALITY.md](QUA
 `GET /settings/document-types` → `{ id; key; name_en; name_ar; version; fields: {name,label_en,label_ar,type,required,is_critical}[]; rules_count; is_active }[]`
 `GET /settings/integrations` → `{ key; name; category; status: IntegrationStatus; detail: string; docs_url?: string }[]`
 `GET /settings/users` → `User[]` (admin only)
-`GET /settings/mode` → `{ mode: "demo" | "azure"; version: string; features: Record<string, boolean> }` — **no auth required**
+`GET /settings/mode` → `{ mode: "demo" | "azure"; version: string; features: Record<string, boolean> }` — **no auth required**. `features.azure_services` counts services that are *actually* configured, not merely the mode.
+
+`GET /settings/azure` → which Azure services this deployment uses, service by service (M6):
+```
+{ mode, auth_backend,
+  services: { key, name, enabled, endpoint, detail, replaces }[],
+  credential: "Managed identity (Entra)" | "API key",
+  tracing_enabled: boolean }
+```
+Generated from the running settings, so it cannot claim a service that is switched off. `replaces` names what runs instead when one is not configured — the honest half of the story. No key or connection string is ever included.
 `GET /settings/assurance` → how the agent assures its answers, generated from the running code:
 ```ts
 { guardrails: { key; name; purpose; implementation; azure }[];
@@ -283,7 +301,9 @@ interface AuditEntry { id: string; case_id: string | null; case_reference: strin
   diagrams: { key: string; title: string; mermaid: string }[]; }
 ```
 `GET /system/graph` → `{ mermaid: string }` (live LangGraph `draw_mermaid`, M2+; M1 returns the planned graph)
-`GET /healthz` (no prefix) → `{status:"ok", db:"ok", mode}`
+`GET /healthz` (no prefix) → `{status:"ok"|"degraded", db:"ok"|"down", mode, version}` — **liveness**. Always 200 while the process can answer. It reports the database as a fact and deliberately does not fail on it: a liveness probe that fails on an unreachable database restarts the API in a loop for something restarting cannot fix, killing every case mid-run.
+
+`GET /readyz` (no prefix) → `{status:"ready"|"not-ready", db, mode, version}` — **readiness**, and it returns **503** when the database is unreachable. That is the whole difference: readiness decides whether this instance is in the load balancer, liveness decides whether it is killed. (M6, for the AKS deployment.)
 
 ## Errors
 All errors: HTTP status + `{ "detail": "<human message>", "code": "<MACHINE_CODE>" }`.

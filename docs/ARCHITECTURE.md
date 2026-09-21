@@ -329,6 +329,99 @@ on a laptop: with the `process` profile off, the API's in-process engine runs th
 
 ---
 
+---
+
+## 6. Azure mode
+
+Nothing in sections 1 to 5 changes. Every Azure service is an implementation of an interface that
+already existed, chosen by configuration:
+
+| Interface (since) | Demo implementation | Azure implementation (M6) |
+|---|---|---|
+| `OcrBackend` (M2) | `DemoOcr` — reads the PDF text layer | `DocumentIntelligenceOcr` — real OCR, with geometry |
+| `ExtractorBackend` (M2) | `DemoExtractor` — deterministic label reader | `FoundryExtractor` — structured outputs |
+| `Embedder` (M3) | `HashingEmbedder` — lexical, offline | `FoundryEmbedder` — semantic, 256-d |
+| policy retriever (M3) | pgvector | `azure/search.py` — hybrid *(written, not deployed)* |
+| prompt shield (M3) | local pattern set | Azure Prompt Shields — **combined**, not replaced |
+| content safety (M3) | local term list | Azure Content Safety — **combined**, not replaced |
+| `StorageBackend` (M1) | local folder | `AdlsStorage` — ADLS Gen2 + SAS |
+| calibration fit (M3) | in-process | Azure ML command job |
+| tracing | console | Azure Monitor (OpenTelemetry) |
+| auth backend (M1) | local JWT | Entra ID token validation |
+
+### The switch is per service, not per mode
+
+`WATHIQ_MODE=azure` is the master switch, but each service is turned on by **its own endpoint**.
+An empty endpoint means that service keeps its demo implementation and the Settings → Azure tab
+names which one answered. So "real OCR, demo extractor" is a legitimate, expressible state rather
+than a half-broken one — and it is a sensible way to start, because it isolates one variable.
+
+This is the same rule the MCP servers have followed since M3: an empty URL means "not configured",
+and the agent says so rather than pretending the check was done.
+
+```mermaid
+flowchart LR
+    caller["a graph node"] --> factory{"is this service's<br/>endpoint set?"}
+    factory -->|"no"| demo["demo implementation<br/>(runs offline)"]
+    factory -->|"yes"| azure["Azure adapter"]
+    azure -->|"call fails"| err["raise —<br/>never a silent fallback"]
+    azure -->|"call succeeds"| ok["result"]
+    demo --> ok
+```
+
+The `raise` branch is the important one. Falling back to the demo reader when Document
+Intelligence returns a 500 would produce a case that *looks* normal, carries confident-looking
+numbers, and was read by something nobody chose. (DECISIONS #64)
+
+### What Document Intelligence unlocked
+
+The case screen has said "no source region" since M2, because neither the demo reader nor M3's
+workers could produce coordinates. Document Intelligence returns a polygon and a confidence for
+every word, which gives two things at once:
+
+1. **A highlight box per field.** `agent/geometry.py` joins a *value* to the *line* it was printed
+   on, matching on text rather than line number — the text passes through the guardrails between
+   OCR and extraction, so line 7 of the OCR is not reliably line 7 of the extractor. When no line
+   matches, the field keeps `bbox = None` and the UI goes on saying "no source region". It never
+   guesses: a highlight box is a claim that the value is *there*.
+
+2. **A sixth confidence signal.** `read` asks how sure the engine was of *this value's* characters,
+   which is a different question from `ocr`, which is about the page. A page can read cleanly while
+   one smudged field on it does not — and that field is exactly the one a reviewer should see.
+   `combine()` re-normalises over the signals present, so demo mode scores exactly what it scored
+   before M6.
+
+### Where the secrets went
+
+There are two left: the database password and the JWT signing key. Everything else authenticates
+with a **workload identity** — the pod presents its Kubernetes service-account token, the cluster's
+OIDC issuer vouches for it, Entra exchanges it for an Azure token. No key for Foundry, Document
+Intelligence, Content Safety, Storage, Search or Azure ML exists in the image, in a manifest or in
+the repository.
+
+```mermaid
+flowchart LR
+    pod["pod<br/>serviceAccount: wathiq"] -->|"projected SA token"| oidc["AKS OIDC issuer"]
+    oidc -->|"federated credential"| entra["Microsoft Entra"]
+    entra -->|"access token"| svc["Foundry / Doc Intelligence /<br/>Content Safety / ADLS / ML"]
+    kv["Key Vault"] -->|"CSI driver"| pod
+    kv -.->|"only two secrets:<br/>db password, JWT key"| kv
+```
+
+### Deployment
+
+`infra/bicep/` creates every resource at **resource-group scope**, so a deployment cannot reach
+outside the group it is given. `infra/helm/wathiq/` runs api, web and the four MCP servers; the
+separate process worker is rendered only when Conductor is selected. Each gets its own Deployment,
+which is what makes least privilege real: the investigator has no network
+route to core banking at all.
+
+One `Standard_D2s_v3` node carries the whole stack, because M4's in-process workflow engine implements
+the same `ProcessEngine` interface as Conductor and needs no separate orchestrator. `infra/README.md`
+has the costed list and the runbook.
+
+---
+
 ## Data model in one paragraph
 A **case** belongs to a customer and has **documents**; each document produces **extracted fields**
 (value, confidence, calibrated confidence, page, bounding box, source snippet, critical flag).

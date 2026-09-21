@@ -380,3 +380,114 @@ Lower is better; chart-bin averages cannot substitute for the individual outcome
 proof that it works on unseen data.
 
 **MLflow experiment** — a logbook of fit attempts, parameters and metrics, allowing comparisons.
+
+## Added in M6 (Azure mode)
+
+**Azure AI Foundry** — Microsoft's hosted home for models. Wathiq calls a *deployment* in it for
+extraction. Like renting a specific engine rather than buying the factory.
+
+**Deployment (of a model)** — a named, sized instance of a model you can call. `gpt-4o-mini` is the
+model; `gpt-4o-mini` as deployed in Wathiq's account, with 30 units of capacity, is the deployment.
+Like a phone number for one particular office of a company.
+
+**Structured outputs** — telling the model the exact JSON shape its answer must take, so the
+service constrains the generation rather than you hoping and parsing. Like handing someone a form
+to fill in instead of asking for a letter.
+
+**Strict mode** — the stricter version of the above, where every field must appear and no extra
+field is allowed. Optional fields are still expressed, as an explicit `null` — which is the point:
+a missing key and "the document does not contain this" would otherwise be indistinguishable.
+
+**Grounding** — checking that a value the model returned actually appears in the document. Wathiq
+never asks the model where it found something; it looks. Like marking an essay against the sources
+rather than against its own bibliography.
+
+**Document Intelligence** — Azure's OCR service. It reads the pixels and returns, for every word,
+the text, a *polygon* and a *confidence*.
+
+**Polygon / bounding box** — where something sits on the page. Document Intelligence gives four
+corners in inches; Wathiq converts them to fractions of the page so the viewer can draw the box on
+a render of any size.
+
+**`prebuilt-layout` vs `prebuilt-document`** — two Document Intelligence models. Layout returns
+words, lines and geometry. Document additionally guesses key-value pairs. Wathiq asks for layout,
+because its field names are versioned configuration and it does not want a second, unversioned
+schema in the middle.
+
+**Prompt Shields** — Microsoft's detector for instructions hidden inside content. Wathiq runs it
+*beside* its own pattern set rather than instead of it, and either one flagging sends the case to a
+person.
+
+**ADLS Gen2** — blob storage with a *hierarchical namespace*, so folders are real folders. Buys a
+permission per folder and an instant rename.
+
+**SAS (shared access signature)** — a URL with permission baked into it and an expiry. Wathiq's are
+read-only and last fifteen minutes. Like a hotel key card rather than a cut key.
+
+**User delegation key** — a key Entra issues, briefly, so a SAS can be signed by *an identity*
+rather than by the account's master key. The difference is traceability: you can see who issued the
+link.
+
+**Managed identity** — an identity Azure gives to a running thing rather than to a person, so it
+can authenticate with no password stored anywhere.
+
+**Workload identity** — the same idea for a Kubernetes pod. The pod shows a token from its cluster,
+the cluster is trusted by Entra, Entra hands back a real Azure token. Like a staff pass that the
+building verifies with your employer rather than a key you carry.
+
+**Federated credential** — the standing arrangement that makes the above work: "a token from *this*
+cluster, for *this* namespace and service account, may act as this identity". All three are checked.
+
+**Key Vault CSI driver** — the component that mounts a secret from Key Vault into a pod as a file,
+so the secret is never written into a Kubernetes manifest or a deployment command.
+
+**Entra ID** — Microsoft's directory: work accounts, and what each may do. Formerly Azure AD.
+
+**JWKS** — the list of public keys a token issuer publishes, so anyone can verify a signature
+without a shared password. Each token names which key signed it.
+
+**App role** — a permission Entra grants a person *for one application*. Wathiq maps five of them
+onto its own roles, and a token with none is refused rather than given the lowest.
+
+**Just-in-time provisioning** — creating the local account the first time someone signs in, instead
+of setting it up in advance.
+
+**Bicep** — a language for describing Azure resources as a file, so a deployment is repeatable and
+reviewable. Like a recipe rather than a memory of cooking.
+
+**Resource group** — a folder for Azure resources, and the unit of deletion. Wathiq deploys at
+resource-group *scope*, which is also its main safety control: such a deployment physically cannot
+touch anything outside its group.
+
+**Helm chart** — a package of Kubernetes manifests with the changeable parts pulled out as values.
+Like a template letter with blanks.
+
+**Helm hook** — a job Helm runs at a chosen point in a release. Wathiq's migration is a
+`pre-install` hook, so the schema is always current before any pod that reads it starts.
+
+**Liveness vs readiness probe** — two different questions with two different consequences. Liveness:
+is this process alive — if not, restart it. Readiness: can it serve right now — if not, take it out
+of the load balancer but leave it alone. A database outage should fail readiness, never liveness:
+restarting cannot fix it and would kill every case mid-run.
+
+**Requests vs limits** — what a container is guaranteed, and what it may never exceed. The
+scheduler packs nodes by requests; limits stop one container taking the node down with it.
+
+**Quota pool** — how Azure meters model capacity: per subscription, per region, per model, per SKU.
+Two accounts in one subscription share it. This is why Wathiq deploys `gpt-4o-mini` — so it draws
+on a pool the existing system does not use and cannot throttle it.
+
+**Soft delete / purge** — a deleted Key Vault or Cognitive Services account is recoverable for a
+while, and keeps its *name* (and, for OpenAI, its quota) until it is purged. Teardown purges
+explicitly, or the next deployment fails for capacity nothing is using.
+
+**OpenTelemetry** — a vendor-neutral standard for traces. Wathiq emits spans through it, and Azure
+Monitor happens to be what receives them.
+
+**Span** — one timed step inside a larger operation, with a few labelled facts attached. Wathiq
+opens one per graph node, per tool call and per guardrail decision — carrying ids and verdicts, never
+document text.
+
+**Trace vs audit trail** — different questions. The audit trail says what happened to *this case*
+and who did it; it stays in the bank's database and is append-only. A trace says why something was
+slow or how often a check fires *across all cases*, and it leaves the building. Wathiq has both.

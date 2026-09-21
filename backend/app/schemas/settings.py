@@ -38,6 +38,31 @@ class ModeInfo(BaseModel):
     features: dict[str, bool]
 
 
+class AzureServiceOut(BaseModel):
+    """One Azure service, and whether it is actually answering.
+
+    Read from the running settings, not from a document, so this screen cannot claim a service
+    that is not switched on. No key or connection string is ever included.
+    """
+
+    key: str
+    name: str
+    enabled: bool
+    endpoint: str
+    detail: str
+    # What runs instead when this service is not configured — the honest half of the story.
+    replaces: str
+
+
+class AzureInfo(BaseModel):
+    mode: Literal["demo", "azure"]
+    auth_backend: Literal["demo", "entra"]
+    services: list[AzureServiceOut]
+    # How the configured services authenticate: a managed identity or a key.
+    credential: str
+    tracing_enabled: bool
+
+
 class RuleOut(BaseModel):
     """One rule in a pack, in the form the Settings screen shows it."""
 

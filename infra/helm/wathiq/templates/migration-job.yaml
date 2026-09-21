@@ -1,0 +1,153 @@
+{{/*
+Schema migration, as a release Job.
+
+The ServiceAccount and SecretProviderClass are ordinary release resources, so this must be one
+too: pre-install hooks run before those dependencies exist. API and worker pods use a read-only
+init-container check and cannot start until this one writer reaches every Alembic head. Helm is
+invoked with `--wait-for-jobs`, so a release cannot report success before the migration does.
+
+The release revision in the name makes the immutable Job pod template upgrade-safe. The previous
+revision is removed by Helm and successful Jobs are also garbage-collected after an hour; failed
+ones remain inspectable.
+
+The seed is a separate, `post-install`-only Job. Migrating is required every time; seeding
+demo data is a first-run convenience and must not re-run on an upgrade.
+
+**Why this is not bypassed by the image's entrypoint.** `backend/docker-entrypoint.sh` waits for
+the database, migrates *and* seeds before running its command — which is right for
+`docker compose up` and wrong here, because three replicas would race on the migration. In
+Kubernetes, `command:` replaces the image's ENTRYPOINT (and `args:` replaces CMD), so every
+container in this chart sets `command:` and the entrypoint script never runs. That is load-bearing
+rather than incidental: dropping `command:` from a Deployment would silently reintroduce the race.
+*/}}
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "wathiq.fullname" . }}-migrate-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  # Clean up an hour after it finishes, so a successful release does not leave Jobs behind.
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "wathiq.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: migrate
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "wathiq.env" . | nindent 12 }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            {{- include "wathiq.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.keyVault.enabled }}
+            - name: secrets-store
+              mountPath: /mnt/secrets
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "wathiq.fullname" . }}-kv
+        {{- end }}
+{{- end }}
+{{- if .Values.seed.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "wathiq.fullname" . }}-seed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: seed
+  annotations:
+    # The seeder is idempotent and exits immediately when the database already holds data.
+    # Running after upgrades also repairs a release whose first install stopped before this
+    # hook (for example, a failed readiness check) without requiring a manual database step.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "wathiq.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: seed
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: seed
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "app.db.seed"]
+          env:
+            {{- include "wathiq.env" . | nindent 12 }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 640Mi
+          securityContext:
+            {{- include "wathiq.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage
+              mountPath: /app/storage
+            {{- if .Values.keyVault.enabled }}
+            - name: secrets-store
+              mountPath: /mnt/secrets
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: storage
+          emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "wathiq.fullname" . }}-kv
+        {{- end }}
+{{- end }}

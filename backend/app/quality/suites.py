@@ -14,8 +14,9 @@ from dataclasses import dataclass
 from starlette.concurrency import run_in_threadpool
 
 from app.agent import classifier, critic, worker
+from app.agent.extractor import DemoExtractor, ExtractorBackend
 from app.agent.nodes import needs_human
-from app.agent.ocr import get_ocr
+from app.agent.ocr import DemoOcr, OcrBackend
 from app.agent.tools import ToolBroker
 from app.db.enums import QualityBand
 from app.db.seed_data import PROMPT_DEFS
@@ -47,7 +48,14 @@ class Result:
         }
 
 
-def extract(text: str, schema: list[dict], doc_type: str, confidence: float = 0.97):
+def extract(
+    text: str,
+    schema: list[dict],
+    doc_type: str,
+    confidence: float = 0.97,
+    *,
+    extractor_backend: ExtractorBackend | None = None,
+):
     fields, report = worker.extract_document(
         {
             "document_id": "evaluation",
@@ -57,6 +65,7 @@ def extract(text: str, schema: list[dict], doc_type: str, confidence: float = 0.
             "ocr_confidence": confidence,
         },
         schema,
+        extractor_backend=extractor_backend or DemoExtractor(),
     )
     return {f["name"]: f["value"] for f in fields}, report
 
@@ -84,7 +93,15 @@ async def run_band(
     prompt: dict | None = None,
     regressions: list | None = None,
     broken: bool = False,
+    ocr_backend: OcrBackend | None = None,
+    extractor_backend: ExtractorBackend | None = None,
 ) -> list[Result]:
+    # Quality Lab is a reproducible offline diagnostic suite shared with CI. It must not
+    # inherit the deployment's Azure factories: doing so turns "run all" into dozens of live
+    # Document Intelligence and Foundry calls in one browser request, which is slow, costly,
+    # and eventually throttled. Live-provider checks belong to test_azure_live.py.
+    evaluation_ocr = ocr_backend or DemoOcr()
+    evaluation_extractor = extractor_backend or DemoExtractor()
     results: list[Result] = []
     if band in (QualityBand.model, QualityBand.prompt):
         for sample in samples():
@@ -93,8 +110,14 @@ async def run_band(
             if prompt and prompt["document_type"] not in ("all", sample.doc_type):
                 continue
             data = await run_in_threadpool(pdf_bytes, sample.key)
-            read = get_ocr().read(data, "application/pdf")
-            actual, _ = extract(read.text, sample.schema, sample.doc_type, read.confidence)
+            read = evaluation_ocr.read(data, "application/pdf")
+            actual, _ = extract(
+                read.text,
+                sample.schema,
+                sample.doc_type,
+                read.confidence,
+                extractor_backend=evaluation_extractor,
+            )
             detected, _, _ = classifier.classify(read.text)
             if broken:
                 actual = {}
@@ -130,7 +153,9 @@ async def run_band(
             ("Expiry date: 2030-12-31", "2030-12-31"),
             ("Issue date\n2020-01-01\nExpiry date\ninvalid", None),
         ]:
-            values, report = extract(text, schema, "trade_license")
+            values, report = extract(
+                text, schema, "trade_license", extractor_backend=evaluation_extractor
+            )
             results.append(
                 Result(
                     f"bounded repair: {text[:45]}",
@@ -146,7 +171,12 @@ async def run_band(
         )
         results.append(Result("critic rejects an ungrounded value", False, verdict.agreed))
         for example in regressions or []:
-            actual, _ = extract(example.input_text, example.field_schema, example.document_type)
+            actual, _ = extract(
+                example.input_text,
+                example.field_schema,
+                example.document_type,
+                extractor_backend=evaluation_extractor,
+            )
             results.append(
                 Result(
                     f"reviewer correction {example.source_key}",
@@ -193,6 +223,7 @@ async def run_band(
                     }
                 ],
                 "trade_license",
+                extractor_backend=evaluation_extractor,
             )
             results.append(Result(f"hostile date: {text!r}", expected, actual["expiry_date"]))
         results.append(
@@ -209,6 +240,7 @@ async def run_band(
                 }
             ],
             "trade_license",
+            extractor_backend=evaluation_extractor,
         )
         results.append(Result("Arabic label remains distinct", "SYN-123", actual["license_number"]))
     if broken and band not in (QualityBand.model, QualityBand.prompt) and results:

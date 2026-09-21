@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.agent import worker
+from app.agent.extractor import DemoExtractor
 from app.agent.ocr import DemoOcr
 from app.core.config import settings
 from app.db import models
@@ -26,9 +27,21 @@ async def test_real_suites_and_negative_controls(band):
 
 
 async def test_real_extractor_regression_is_detected(monkeypatch):
-    monkeypatch.setattr(worker.get_extractor(), "extract", lambda *args: {})
-    results = await run_band(QualityBand.model)
+    # `**kwargs` so the stub keeps matching `ExtractorBackend.extract` as it grows — M6
+    # added the keyword-only `prompt` and `examples`.
+    broken = DemoExtractor()
+    monkeypatch.setattr(broken, "extract", lambda *args, **kwargs: {})
+    results = await run_band(QualityBand.model, extractor_backend=broken)
     assert sum(not r.passed for r in results) >= 20
+
+
+async def test_quality_suite_never_resolves_the_deployment_extractor(monkeypatch):
+    def deployment_factory_must_not_run():
+        raise AssertionError("Quality Lab must stay deterministic and offline")
+
+    monkeypatch.setattr(worker, "get_extractor", deployment_factory_must_not_run)
+    results = await run_band(QualityBand.model)
+    assert results and all(result.passed for result in results)
 
 
 def test_dataset_has_answer_keys_and_real_image_only_blur():

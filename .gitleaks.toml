@@ -1,0 +1,53 @@
+# Wathiq — secret scanning configuration.
+#
+# Extends the default rule set rather than replacing it, so every stock rule still applies.
+# Nothing here is a blanket exemption: each allowlist entry names an exact value and says why
+# that value is public. A broad ignore on a file or a rule would be how a real key gets through.
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Wathiq's own settings prefix, in case a real key is ever pasted next to one.
+id = "wathiq-env-secret"
+description = "A WATHIQ_* setting that looks like it was filled in with a real secret"
+regex = '''(?i)WATHIQ_[A-Z_]*(KEY|SECRET|PASSWORD|CONNECTION_STRING)\s*=\s*["']?[A-Za-z0-9+/=_\-]{24,}'''
+tags = ["wathiq", "config"]
+
+  [rules.allowlist]
+  # The committed example file must keep every setting listed with an empty value.
+  paths = ['''\.env\.example$''']
+  # The seeded demo password is in the repository on purpose: it signs in to synthetic data on
+  # a local container, and it is documented as demo-only in README and .env.example.
+  regexes = ['''Wathiq!Demo2026''', '''dev-only-insecure-secret-change-me''']
+
+[allowlist]
+description = "Values that look like secrets and are public by definition"
+
+  # ---- Azure built-in role definition ids -------------------------------------
+  #
+  # These are GUIDs, so `generic-api-key` matches them — especially where the surrounding
+  # variable name contains "secret", as in `keyVaultSecretsUser`. They are not secrets in any
+  # sense: a built-in role id is the SAME in every Azure tenant on earth, is published by
+  # Microsoft, and grants nothing on its own. A role assignment is what grants access, and that
+  # names a principal and a scope, both of which are visible in the template.
+  #
+  # Listed individually rather than as a GUID-shaped pattern, so a real key that happens to look
+  # like a GUID is still caught.
+  regexes = [
+    # Key Vault Secrets User — read secret values
+    '''4633458b-17de-408a-b874-0445c86b69e6''',
+    # Cognitive Services OpenAI User — call a model deployment
+    '''5e0bd9bd-7b93-4f28-af87-19fc36ad61bd''',
+    # Cognitive Services User — call Document Intelligence and Content Safety
+    '''a97b65f3-24c7-4388-baec-2e87135dc908''',
+    # Storage Blob Data Contributor — read and write blobs
+    '''ba92f5b4-2d11-453d-a403-e96b0029c9fe''',
+    # Storage Blob Delegator — request a user delegation key to sign a SAS
+    '''db58b8e5-c6ad-4a2a-8342-4190687cbf4a''',
+    # Search Index Data Reader — query an index
+    '''1407120a-92aa-4202-b7e9-c0e197c71c8f''',
+    # AcrPull — pull an image
+    '''7f951dda-4ed3-4680-a7ca-43fe172d538d''',
+  ]
+  regexTarget = "match"

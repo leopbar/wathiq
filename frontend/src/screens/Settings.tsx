@@ -9,6 +9,7 @@ import { IntegrationsTab } from "./settings/IntegrationsTab";
 import { ModeTab } from "./settings/ModeTab";
 import { AssuranceTab } from "./settings/AssuranceTab";
 import { ProcessTab } from "./settings/ProcessTab";
+import { AzureTab } from "./settings/AzureTab";
 
 export default function Settings() {
   const { role } = useAuth();
@@ -29,6 +30,7 @@ export default function Settings() {
           { value: "assurance", label: "Assurance", content: <AssuranceTab /> },
           { value: "process", label: "Process", content: <ProcessTab /> },
           { value: "integrations", label: "Integrations", content: <IntegrationsTab /> },
+          { value: "azure", label: "Azure", content: <AzureTab /> },
           { value: "mode", label: "Mode", content: <ModeTab /> },
         ]}
       />

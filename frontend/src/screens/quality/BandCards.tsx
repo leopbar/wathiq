@@ -17,7 +17,7 @@ const BAND_ICON: Record<string, LucideIcon> = {
 };
 
 const BAND_BLURB: Record<string, string> = {
-  model: "Does the model read the document correctly?",
+  model: "Does deterministic extraction preserve the answer contract?",
   prompt: "Are prompts correct and stable under paraphrase?",
   agent: "Does the graph route, interrupt and stop as designed?",
   ai_security: "Injection, exfiltration and unsafe-output defences.",

@@ -11,17 +11,18 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid 1001 wathiq && useradd --uid 1001 --gid 1001 --create-home wathiq
-
 # ---------- dependency layers (cached on pyproject/uv.lock only) ----------
+# `--extra azure` in both stages: one image serves demo and Azure mode. The SDKs are still
+# imported lazily, so demo mode never loads them — installing them only means an operator can
+# switch WATHIQ_MODE without rebuilding, which is what makes the mode a *setting*, not a build.
+
 FROM base AS deps-prod
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project --extra azure
 
 FROM base AS deps-dev
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --extra azure
 
 # ---------- dev: hot reload, dev dependencies, source bind-mounted ----------
 FROM deps-dev AS dev

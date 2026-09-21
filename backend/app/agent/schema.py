@@ -118,11 +118,41 @@ def json_schema(doc_type: str, field_schema: list[dict[str, Any]]) -> dict[str, 
     return build_model(doc_type, field_schema).model_json_schema()
 
 
+def strict_json_schema(doc_type: str, field_schema: list[dict[str, Any]]) -> dict[str, Any]:
+    """The same schema, in the dialect Azure OpenAI structured outputs accept in strict mode.
+
+    Two differences from `json_schema()`, both required by the service rather than chosen:
+
+    * **every** property must be listed in `required`. That sounds wrong for optional fields,
+      but it is not: each field is typed `string | null`, so "required" means the model must
+      emit the key, and `null` remains the correct answer for a value the document does not
+      contain. That is exactly what we want — a silently omitted key would be indistinguishable
+      from a field the model forgot.
+    * `additionalProperties: false` must be present on the object. Pydantic already emits it
+      because the model is built with `extra="forbid"`, but we set it explicitly so a change to
+      that config cannot quietly loosen the contract.
+
+    Strict mode is what makes the output *parseable by construction*. The Pydantic validation in
+    `validate()` still runs afterwards, because strict mode guarantees the shape and says
+    nothing about whether "31/02/2026" is a date.
+    """
+    schema = json_schema(doc_type, field_schema)
+    properties = schema.get("properties", {})
+    schema["required"] = sorted(properties)
+    schema["additionalProperties"] = False
+    # `title` on every property is noise in a prompt and counts against the token budget.
+    for spec in properties.values():
+        spec.pop("title", None)
+    schema.pop("title", None)
+    return schema
+
+
 __all__ = [
     "FieldError",
     "build_model",
     "expected_types",
     "json_schema",
     "required_fields",
+    "strict_json_schema",
     "validate",
 ]

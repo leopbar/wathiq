@@ -26,8 +26,9 @@ import time
 from typing import Any
 
 from app.agent import confidence as confidence_signals
+from app.agent import geometry
 from app.agent import schema as extraction_schema
-from app.agent.extractor import ExtractedValue, get_extractor
+from app.agent.extractor import ExtractedValue, ExtractorBackend, get_extractor
 from app.agent.state import FieldState
 from app.rag import fewshot
 
@@ -196,20 +197,42 @@ def extract_document(
     field_schema: list[dict[str, Any]],
     *,
     order_offset: int = 0,
+    prompt_body: str = "",
+    extractor_backend: ExtractorBackend | None = None,
 ) -> tuple[list[FieldState], dict[str, Any]]:
     """Extract every field of one document, repairing what does not validate.
 
     Returns the fields and a report: attempts used, repairs applied, examples selected.
     """
     started = time.perf_counter()
-    extractor = get_extractor()
+    extractor = extractor_backend or get_extractor()
     doc_type = str(document["doc_type"])
     # The guardrails node put a cleaned copy of the text in `safe_text`; the raw text is only
     # a fallback for a state that predates it.
     text = str(document.get("safe_text") or document.get("ocr_text") or "")
     lines = text.split("\n")
 
-    found = extractor.extract(lines, field_schema, doc_type)
+    # Few-shot examples are selected *before* the call now, not after it: in Azure mode they
+    # are part of the prompt rather than a record of what would have been sent. The same
+    # selection runs in demo mode and is reported the same way; only its destination differs.
+    selected = fewshot.select(doc_type, text, k=2)
+    examples = [selection.as_dict() for selection in selected]
+
+    found = extractor.extract(
+        lines,
+        field_schema,
+        doc_type,
+        prompt=prompt_body or None,
+        examples=[
+            {
+                "id": selection.example.id,
+                "text": selection.example.text,
+                "expected": selection.example.expected,
+            }
+            for selection in selected
+        ]
+        or None,
+    )
     values: dict[str, str | None] = {}
     for spec in field_schema:
         name = str(spec["name"])
@@ -302,7 +325,6 @@ def extract_document(
 
     valid, _ = extraction_schema.validate(model, values)
 
-    examples = [selection.as_dict() for selection in fewshot.select(doc_type, text, k=2)]
     fields = _to_fields(
         document=document,
         field_schema=field_schema,
@@ -341,6 +363,10 @@ def _to_fields(
     text = str(document.get("safe_text") or document.get("ocr_text") or "")
     ocr_confidence = float(document.get("ocr_confidence") or 0.0)
     types = extraction_schema.expected_types(field_schema)
+    # Geometry, when the OCR engine reported any (M6, Document Intelligence). Empty for the
+    # demo reader, and every lookup below then returns None — so a field goes on saying it has
+    # no source region rather than acquiring an invented one.
+    line_boxes = list(document.get("line_boxes") or [])
 
     fields: list[FieldState] = []
     for order, spec in enumerate(field_schema):
@@ -348,14 +374,23 @@ def _to_fields(
         value = values.get(name)
         original = found.get(name)
 
+        label_text = original.source_text if original else None
+        bbox, located_page = geometry.locate(value, line_boxes, label=label_text)
+
         signals = [
             confidence_signals.ocr_signal(ocr_confidence),
             confidence_signals.grounding(value, text),
             confidence_signals.label_signal(
                 matched_label=original is not None,
-                source_text=original.source_text if original else None,
+                source_text=label_text,
             ),
             confidence_signals.shape(value, types.get(name, "string")),
+            # Sixth signal, M6: how sure the engine was of *this value's* characters, as
+            # opposed to the page as a whole. `None` without Document Intelligence, and
+            # `combine()` drops a missing signal instead of scoring it zero.
+            confidence_signals.read_signal(
+                geometry.read_confidence(value, line_boxes, label=label_text)
+            ),
         ]
         breakdown = confidence_signals.combine(
             signals, self_corrections=max(0, attempts.get(name, 1) - 1)
@@ -372,8 +407,12 @@ def _to_fields(
                 "signals": breakdown.as_dict()["signals"],
                 "is_critical": bool(spec.get("is_critical", False)),
                 "document_id": str(document["document_id"]),
-                "page": original.page if original else None,
-                "bbox": None,
+                # The located page wins: it is where the value was actually printed, whereas
+                # the extractor's page is an assumption from the reading order.
+                "page": located_page if located_page is not None else (
+                    original.page if original else None
+                ),
+                "bbox": bbox,
                 "source_text": original.source_text if original else None,
                 "attempts": attempts.get(name, 1),
                 "critic": None,
