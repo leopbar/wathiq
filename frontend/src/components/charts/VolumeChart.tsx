@@ -8,12 +8,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 import type { DashboardCharts } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { axisProps, tooltipStyles } from "./ChartTooltip";
 import { chartMargin, useChartPalette } from "./chartTheme";
 
 export function VolumeChart({ data }: { data: DashboardCharts["volume_by_day"] }) {
+  const { t } = useTranslation();
   const palette = useChartPalette();
   const styles = tooltipStyles(palette);
 
@@ -48,7 +50,7 @@ export function VolumeChart({ data }: { data: DashboardCharts["volume_by_day"] }
         <Area
           type="monotone"
           dataKey="straight_through"
-          name="Straight-through"
+          name={t("dashboard.straightThrough")}
           stackId="1"
           stroke={palette.primary}
           fill="url(#wq-straight)"
@@ -57,7 +59,7 @@ export function VolumeChart({ data }: { data: DashboardCharts["volume_by_day"] }
         <Area
           type="monotone"
           dataKey="reviewed"
-          name="Human reviewed"
+          name={t("dashboard.humanReviewed")}
           stackId="1"
           stroke={palette.warning}
           fill="url(#wq-reviewed)"

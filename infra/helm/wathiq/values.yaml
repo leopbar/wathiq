@@ -118,6 +118,9 @@ worker:
 web:
   replicas: 1
   port: 8080
+  image:
+    # Optional component override for UI-only releases. Empty inherits image.tag.
+    tag: ""
   # Match backend WATHIQ_MAX_UPLOAD_MB (25 MB by default).
   maxUploadSize: 25m
   resources:

@@ -1,4 +1,14 @@
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
+import { ar, enUS } from "date-fns/locale";
+import i18n from "@/i18n";
+
+function isArabic(): boolean {
+  return i18n.resolvedLanguage?.startsWith("ar") ?? false;
+}
+
+function localeName(): "ar-AE" | "en-US" {
+  return isArabic() ? "ar-AE" : "en-US";
+}
 
 export function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -8,7 +18,7 @@ export function parseDate(value: string | null | undefined): Date | null {
 
 export function formatDate(value: string | null | undefined, pattern = "d MMM yyyy"): string {
   const d = parseDate(value);
-  return d ? format(d, pattern) : "—";
+  return d ? format(d, pattern, { locale: isArabic() ? ar : enUS }) : "—";
 }
 
 export function formatDateTime(value: string | null | undefined): string {
@@ -22,17 +32,24 @@ export function formatTime(value: string | null | undefined): string {
 export function formatRelative(value: string | null | undefined): string {
   const d = parseDate(value);
   if (!d) return "—";
-  return `${formatDistanceToNowStrict(d)} ago`;
+  return formatDistanceToNowStrict(d, {
+    addSuffix: true,
+    locale: isArabic() ? ar : enUS,
+  });
 }
 
 export function formatPercent(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `${(value * 100).toFixed(digits)}%`;
+  return new Intl.NumberFormat(localeName(), {
+    style: "percent",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
 }
 
 export function formatNumber(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toLocaleString("en-US", {
+  return value.toLocaleString(localeName(), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
@@ -40,7 +57,12 @@ export function formatNumber(value: number | null | undefined, digits = 0): stri
 
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `$${value.toFixed(value < 1 ? 3 : 2)}`;
+  return new Intl.NumberFormat(localeName(), {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 1 ? 3 : 2,
+    maximumFractionDigits: value < 1 ? 3 : 2,
+  }).format(value);
 }
 
 export function formatDuration(ms: number | null | undefined): string {
@@ -81,10 +103,10 @@ export function formatCountdown(ms: number): string {
   const minutes = totalMinutes % 60;
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
-    return `${days}d ${hours % 24}h`;
+    return isArabic() ? `${days}ي ${hours % 24}س` : `${days}d ${hours % 24}h`;
   }
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (hours > 0) return isArabic() ? `${hours}س ${minutes}د` : `${hours}h ${minutes}m`;
+  return isArabic() ? `${minutes}د` : `${minutes}m`;
 }
 
 export function initials(name: string): string {

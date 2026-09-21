@@ -43,7 +43,63 @@
     "export": "تصدير CSV",
     "filters": "عوامل التصفية",
     "clear": "مسح",
-    "apply": "تطبيق"
+    "apply": "تطبيق",
+    "refresh": "تحديث",
+    "collapse": "طي القائمة",
+    "mainNavigation": "التنقل الرئيسي",
+    "accountMenu": "قائمة الحساب"
+  },
+  "roles": {
+    "ops_officer": "موظف العمليات",
+    "reviewer": "المراجع",
+    "supervisor": "المشرف",
+    "admin": "مسؤول النظام",
+    "auditor": "المدقق"
+  },
+  "roleDescriptions": {
+    "ops_officer": "ينشئ الحالات ويرفع المستندات ويتابع تقدمها.",
+    "reviewer": "يراجع الحقول المشكوك فيها ويعتمدها أو يصححها أو يرفضها.",
+    "supervisor": "يتابع التصعيدات ومخالفات اتفاقية مستوى الخدمة ولوحات الفريق.",
+    "admin": "يدير أنواع المستندات والتوجيهات والقواعد والمستخدمين والتكاملات.",
+    "auditor": "وصول للقراءة فقط إلى جميع الحالات وسجل التدقيق الكامل."
+  },
+  "catalog": {
+    "caseStatus": {
+      "intake": "الاستلام",
+      "processing": "قيد المعالجة",
+      "needs_review": "تحتاج مراجعة",
+      "in_review": "قيد المراجعة",
+      "approved": "معتمدة",
+      "posting": "قيد الترحيل",
+      "completed": "مكتملة",
+      "rejected": "مرفوضة",
+      "failed": "فشلت"
+    },
+    "caseType": {
+      "kyc_refresh": "تحديث اعرف عميلك للشركات",
+      "salary_certificate": "شهادة راتب"
+    },
+    "sla": {
+      "on_track": "ضمن الوقت",
+      "at_risk": "معرضة للتأخير",
+      "breached": "متأخرة",
+      "none": "بلا اتفاقية خدمة"
+    },
+    "priority": {
+      "normal": "عادية",
+      "high": "عالية",
+      "urgent": "عاجلة"
+    },
+    "risk": {
+      "low": "مخاطر منخفضة",
+      "medium": "مخاطر متوسطة",
+      "high": "مخاطر عالية"
+    },
+    "severity": {
+      "info": "معلومة",
+      "warning": "تحذير",
+      "critical": "حرجة"
+    }
   },
   "states": {
     "errorTitle": "حدث خطأ ما",
@@ -51,6 +107,16 @@
     "emptyTitle": "لا يوجد شيء بعد",
     "forbiddenTitle": "غير مسموح لدورك",
     "notFoundTitle": "الصفحة غير موجودة"
+  },
+  "pagination": {
+    "label": "ترقيم الصفحات",
+    "range": "{{first}}–{{last}} من {{total}} {{label}}",
+    "page": "الصفحة {{page}} من {{pages}}"
+  },
+  "sla": {
+    "over": "متأخرة {{time}}",
+    "left": "متبقي {{time}}",
+    "due": "{{state}} · الاستحقاق {{date}}"
   },
   "login": {
     "title": "تسجيل الدخول",
@@ -62,6 +128,156 @@
     "demoSubtitle": "نقرة واحدة لكل دور — حسابات وبيانات اصطناعية.",
     "trust1": "كل قيمة مستخرجة تحمل درجة الثقة ومصدرها في المستند.",
     "trust2": "لا يراجع البشر إلا ما يشك فيه النظام فعلاً.",
-    "trust3": "تُسجَّل كل عملية في سجل تدقيق غير قابل للتعديل."
+    "trust3": "تُسجَّل كل عملية في سجل تدقيق غير قابل للتعديل.",
+    "signInAs": "تسجيل الدخول بصفة {{role}}",
+    "signingIn": "جارٍ تسجيل الدخول…"
+  },
+  "dashboard": {
+    "greeting": "مرحباً بعودتك، {{name}}",
+    "there": "بك",
+    "description": "الحالة التشغيلية لمسار معالجة المستندات — الأحجام والثقة ووقت المعالجة والنتائج التي تستدعي المراجعة.",
+    "kpiRegion": "مؤشرات الأداء الرئيسية",
+    "kpiError": "تعذر تحميل مؤشرات الأداء",
+    "caseVolume": "حجم الحالات",
+    "caseVolumeDescription": "المعالجة المباشرة مقابل المراجعة البشرية يومياً.",
+    "statusSplit": "توزيع الحالات",
+    "statusSplitDescription": "الموقع الحالي لكل حالة في مسار العمل.",
+    "fieldConfidence": "الثقة في الحقول",
+    "fieldConfidenceDescription": "الثقة المعايرة عبر الحقول المستخرجة.",
+    "handlingTime": "وقت المعالجة",
+    "handlingTimeDescription": "الوسيط والمئين التسعون للمدة الكاملة يومياً.",
+    "topFindings": "أبرز النتائج",
+    "topFindingsDescription": "أكثر الأسباب التي تحيل الحالات إلى المراجعة البشرية.",
+    "noVolume": "لا توجد أحجام بعد",
+    "noVolumeDescription": "ستظهر الحالات هنا بعد معالجتها.",
+    "noCases": "لا توجد حالات بعد",
+    "noExtractions": "لا توجد عمليات استخراج بعد",
+    "noTimings": "لا توجد قياسات زمنية بعد",
+    "noFindings": "لم تُسجَّل نتائج",
+    "casesUnit": "حالة",
+    "straightThrough": "معالجة مباشرة",
+    "humanReviewed": "مراجعة بشرية",
+    "fields": "الحقول",
+    "kpis": {
+      "casesToday": "حالات اليوم",
+      "total": "الإجمالي {{count}}",
+      "straightThrough": "المعالجة المباشرة",
+      "noHuman": "من دون تدخل بشري",
+      "reviewRate": "نسبة المراجعة",
+      "sentToHuman": "أُحيلت إلى مراجع",
+      "avgHandling": "متوسط وقت المعالجة",
+      "slaBreaches": "مخالفات مستوى الخدمة",
+      "avgCost": "متوسط التكلفة للحالة",
+      "modelOcr": "النموذج + قراءة المستند",
+      "openReviews": "المراجعات المفتوحة"
+    }
+  },
+  "cases": {
+    "title": "الحالات",
+    "description": "جميع حزم المستندات في مسار المعالجة مع الحالة والثقة واتفاقية مستوى الخدمة.",
+    "searchPlaceholder": "ابحث بالمرجع أو العميل…",
+    "searchLabel": "البحث في الحالات",
+    "caseTypeFilter": "التصفية حسب نوع الحالة",
+    "allCaseTypes": "جميع أنواع الحالات",
+    "slaFilter": "التصفية حسب مستوى الخدمة",
+    "anySla": "أي حالة لمستوى الخدمة",
+    "assignedToMe": "المسندة إليّ",
+    "statusFilter": "التصفية حسب الحالة",
+    "openFindings": "{{count}} مفتوحة",
+    "noMatches": "لا توجد حالات مطابقة لعوامل التصفية",
+    "noMatchesDescription": "وسّع البحث أو أزل أحد عوامل تصفية الحالة.",
+    "noCases": "لا توجد حالات بعد",
+    "noCasesDescription": "أنشئ الحالة الأولى لمشاهدة مسار المعالجة.",
+    "clearFilters": "مسح عوامل التصفية",
+    "createCase": "إنشاء حالة",
+    "columns": {
+      "reference": "المرجع",
+      "customer": "العميل",
+      "type": "النوع",
+      "status": "الحالة",
+      "confidence": "الثقة",
+      "documents": "المستندات",
+      "findings": "النتائج",
+      "sla": "مستوى الخدمة",
+      "updated": "آخر تحديث"
+    }
+  },
+  "newCase": {
+    "title": "حالة جديدة",
+    "description": "أنشئ حالة عميل وأرفق حزمة المستندات وتابع مسار الوكلاء من البداية إلى النهاية.",
+    "startAnother": "بدء حالة أخرى",
+    "caseDetails": "تفاصيل الحالة",
+    "syntheticOnly": "عملاء اصطناعيون فقط — لا تحتفظ هذه البيئة بسجلات حقيقية.",
+    "customerNameEn": "اسم العميل (بالإنجليزية)",
+    "customerNameAr": "اسم العميل (بالعربية)",
+    "customerNameArHint": "اختياري — يُستخدم للتحقق ثنائي اللغة.",
+    "caseType": "نوع الحالة",
+    "priority": "الأولوية",
+    "notes": "ملاحظات للمراجع",
+    "notesHint": "أي معلومات يحتاجها المراجع قبل اتخاذ القرار.",
+    "notesPlaceholder": "تجديد بعد تغيير المساهمين؛ أُعيد إصدار الرخصة التجارية الشهر الماضي.",
+    "documents": "المستندات",
+    "createAndStart": "إنشاء وبدء",
+    "whatNext": "ماذا سيحدث بعد ذلك",
+    "whatNextDescription": "تُنفَّذ الخطوات نفسها وعددها {{count}} لكل حالة.",
+    "started": "بدأت الحالة",
+    "startedDescription": "الحالة {{reference}} قيد المعالجة الآن.",
+    "startError": "تعذر بدء الحالة",
+    "errors": {
+      "customerName": "اسم العميل مطلوب",
+      "notesLength": "يجب ألا تتجاوز الملاحظات ٢٠٠٠ حرف",
+      "files": "أرفق مستنداً واحداً على الأقل."
+    },
+    "stages": {
+      "creating": "جارٍ إنشاء الحالة…",
+      "uploading_zero": "جارٍ رفع {{count}} مستند…",
+      "uploading_one": "جارٍ رفع مستند واحد…",
+      "uploading_two": "جارٍ رفع مستندين…",
+      "uploading_few": "جارٍ رفع {{count}} مستندات…",
+      "uploading_many": "جارٍ رفع {{count}} مستنداً…",
+      "uploading_other": "جارٍ رفع {{count}} مستند…",
+      "starting": "جارٍ بدء مسار المعالجة…"
+    }
+  },
+  "pipeline": {
+    "intake": { "label": "الاستلام", "description": "استلام المستندات وتخزينها" },
+    "ocr": { "label": "قراءة النص", "description": "استخراج النص من كل مستند" },
+    "guardrails": { "label": "ضوابط الحماية", "description": "حماية التوجيهات وسلامة المحتوى وترميز البيانات الشخصية في السجلات" },
+    "supervisor": { "label": "التصنيف والتخطيط", "description": "تحديد نوع كل مستند وإرسال عامل لمعالجته" },
+    "extract": { "label": "الاستخراج المتوازي", "description": "عامل لكل مستند مع تصحيح ذاتي لأخطاء التحقق" },
+    "critic": { "label": "الناقد", "description": "قراءة مستقلة ثانية تتحدى كل قيمة" },
+    "investigate": { "label": "التحقيق", "description": "فحوصات السجل والتحري ضمن حلقة محدودة" },
+    "validate": { "label": "التحقق", "description": "قواعد مُصدَّرة ومراجع سياسات وثقة معايرة" },
+    "review_gate": { "label": "بوابة المراجعة", "description": "توقف لإشراك المراجع البشري" },
+    "finalize": { "label": "الإنهاء", "description": "إغلاق الحالة وتسجيل التدقيق" }
+  },
+  "dropzone": {
+    "title": "اسحب المستندات إلى هنا",
+    "description": "رخصة تجارية أو هوية إماراتية أو جواز سفر أو عقد تأسيس أو شهادة راتب. ملفات PDF أو PNG أو JPEG أو TIFF بحد أقصى {{size}} لكل ملف.",
+    "choose": "اختيار الملفات",
+    "chooseLabel": "اختيار مستندات للرفع",
+    "tooMany": "يمكن رفع {{count}} مستنداً فقط في المرة الواحدة.",
+    "invalidType": "{{name}}: يُقبل فقط PDF وPNG وJPEG وTIFF.",
+    "tooLarge": "{{name}}: يتجاوز {{size}}.",
+    "duplicate": "{{name}}: تمت إضافته مسبقاً.",
+    "remove": "إزالة {{name}}"
+  },
+  "pipelineProgress": {
+    "title": "مسار المعالجة",
+    "description": "التقدم المباشر للحالة {{reference}}.",
+    "viewCase": "عرض الحالة",
+    "progress": "تقدم مسار المعالجة",
+    "waitingToStart": "بانتظار بدء مسار المعالجة.",
+    "streamDropped": "انقطع البث المباشر. تستمر معالجة الحالة على الخادم — افتحها لرؤية الحالة النهائية.",
+    "parked": "توقف المسار عند بوابة المراجعة وينتظر مراجعاً. سيُستأنف من نقطة الحفظ نفسها بعد القرار.",
+    "noFrames": "أُغلق البث من دون إطارات تقدم. افتح الحالة لرؤية وضعها الحالي.",
+    "thread": "سير عمل Conductor / مسار LangGraph",
+    "copyThread": "نسخ معرف المسار",
+    "rawStream_zero": "البث الخام (لا إطارات)",
+    "rawStream_one": "البث الخام (إطار واحد)",
+    "rawStream_two": "البث الخام (إطاران)",
+    "rawStream_few": "البث الخام ({{count}} إطارات)",
+    "rawStream_many": "البث الخام ({{count}} إطاراً)",
+    "rawStream_other": "البث الخام ({{count}} إطار)"
   }
 }

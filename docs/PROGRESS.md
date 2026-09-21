@@ -2,11 +2,11 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M6 (Azure mode) is built on `m6-azure-mode`, branched from `main` at the M5
-merge (`138181f`). All eight Azure adapters are implemented behind the interfaces that already
-existed, with the infrastructure-as-code given the most depth: 11 Bicep modules at resource-group
-scope, a Helm chart covering six always-on workloads plus the conditional Conductor worker, and a
-guarded teardown.
+**Current status:** M6 (Azure mode) is committed at `0683dfc`; M7 polish is in progress on
+`codex/m7-polish`. The live AKS deployment now has an Azure DNS hostname, trusted automatic HTTPS,
+and redirect-only HTTP. M7 started with the bilingual interface foundation: persisted RTL on reload,
+locale-aware formatting, and Arabic coverage for login, navigation, dashboard, cases, new-case
+intake, shared status labels, SLA timers and pagination.
 
 **Verified:** 291 backend tests, 26 MCP, 33 Playwright; ruff, eslint, tsc and the production
 build clean. Bicep compiles with zero warnings; the default in-process Helm release renders 16
@@ -522,8 +522,8 @@ rather than stopping at "the template compiles".
   and 87 checks in 17.8 seconds with no Azure AI calls.
 
 ## M7 — Polish
-- [ ] UI/UX refinement pass
-- [ ] Arabic / RTL
+- [~] UI/UX refinement pass (live desktop-width audit started; core case flow refined)
+- [~] Arabic / RTL (foundation and core case flow complete; remaining specialist screens pending)
 - [ ] Use case 2 via configuration only (document type + prompt seeded in M1)
 - [ ] Failure-mode gallery
 - [ ] Final README with screenshots
@@ -587,7 +587,7 @@ Legend: `[x]` done · `[~]` partly done, finished in a later milestone · `[ ]` 
 ## Docs (section 11)
 - [x] SYSTEM_OVERVIEW.md
 - [x] ARCHITECTURE.md
-- [x] ARCHITECTURE_DECISION_RECORD.md — 22 formal ADRs with traceability to all 78 decisions
+- [x] ARCHITECTURE_DECISION_RECORD.md — 23 formal ADRs with traceability to all 79 decisions
 - [x] DECISIONS.md
 - [x] GLOSSARY.md
 - [ ] DEMO_SCRIPT.md (M7, drafted after the UI is final)

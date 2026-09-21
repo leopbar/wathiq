@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { FilePlus2, FileStack } from "lucide-react";
 import { apiFetch, buildQuery } from "@/lib/api";
@@ -7,11 +8,8 @@ import { qk } from "@/lib/query";
 import type { CaseStatus, CaseSummary, Page, SlaState } from "@/lib/types";
 import {
   CASE_STATUSES,
-  CASE_STATUS_LABEL,
   CASE_TYPES,
-  CASE_TYPE_LABEL,
   PAGE_SIZE,
-  SLA_LABEL,
   SLA_STATES,
 } from "@/lib/constants";
 import { formatNumber, formatRelative } from "@/lib/format";
@@ -34,6 +32,7 @@ import { Checkbox } from "@/components/ui/toggle";
 import { Pagination } from "@/components/ui/pagination";
 
 export default function Cases() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { role } = useAuth();
 
@@ -80,14 +79,14 @@ export default function Cases() {
   const columns: Column<CaseSummary>[] = [
     {
       key: "reference",
-      header: "Reference",
+      header: t("cases.columns.reference"),
       sortField: "reference",
       cell: (row) => <span className="font-medium text-ink tabular">{row.reference}</span>,
       hideOnCard: true,
     },
     {
       key: "customer",
-      header: "Customer",
+      header: t("cases.columns.customer"),
       sortField: "customer_name",
       cell: (row) => (
         <div className="min-w-0">
@@ -101,44 +100,48 @@ export default function Cases() {
     },
     {
       key: "case_type",
-      header: "Type",
-      cell: (row) => <span className="text-small text-ink-2">{CASE_TYPE_LABEL[row.case_type]}</span>,
+      header: t("cases.columns.type"),
+      cell: (row) => (
+        <span className="text-small text-ink-2">{t(`catalog.caseType.${row.case_type}`)}</span>
+      ),
     },
     {
       key: "status",
-      header: "Status",
+      header: t("cases.columns.status"),
       cell: (row) => <StatusPill status={row.status} />,
       hideOnCard: true,
     },
     {
       key: "confidence",
-      header: "Confidence",
+      header: t("cases.columns.confidence"),
       sortField: "confidence",
       cell: (row) => <ConfidenceBadge value={row.confidence} showLabel={false} />,
     },
     {
       key: "documents",
-      header: "Docs",
+      header: t("cases.columns.documents"),
       cell: (row) => <span className="tabular text-small">{formatNumber(row.document_count)}</span>,
     },
     {
       key: "findings",
-      header: "Findings",
+      header: t("cases.columns.findings"),
       cell: (row) =>
         row.open_finding_count > 0 ? (
-          <Badge tone="warning">{formatNumber(row.open_finding_count)} open</Badge>
+          <Badge tone="warning">
+            {t("cases.openFindings", { count: formatNumber(row.open_finding_count) })}
+          </Badge>
         ) : (
           <span className="text-small text-ink-2 tabular">{formatNumber(row.finding_count)}</span>
         ),
     },
     {
       key: "sla",
-      header: "SLA",
+      header: t("cases.columns.sla"),
       cell: (row) => <SlaTimer dueAt={row.sla_due_at} state={row.sla_state} />,
     },
     {
       key: "updated",
-      header: "Updated",
+      header: t("cases.columns.updated"),
       sortField: "updated_at",
       cell: (row) => <span className="text-small text-ink-2">{formatRelative(row.updated_at)}</span>,
     },
@@ -147,13 +150,13 @@ export default function Cases() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Cases"
-        description="Every document package in the pipeline, with its status, confidence and SLA."
+        title={t("cases.title")}
+        description={t("cases.description")}
         actions={
           can(role, "case.create") ? (
             <Link to="/cases/new" className={buttonVariants({ variant: "primary", size: "sm" })}>
               <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
-              New case
+              {t("nav.newCase")}
             </Link>
           ) : null
         }
@@ -167,8 +170,8 @@ export default function Cases() {
               setSearch(value);
               setPage(1);
             }}
-            placeholder="Search reference or customer…"
-            ariaLabel="Search cases"
+            placeholder={t("cases.searchPlaceholder")}
+            ariaLabel={t("cases.searchLabel")}
             className="w-full sm:max-w-xs"
           />
           <Select
@@ -177,12 +180,15 @@ export default function Cases() {
               setCaseType(value);
               setPage(1);
             }}
-            ariaLabel="Filter by case type"
+            ariaLabel={t("cases.caseTypeFilter")}
             className="w-full sm:w-56"
-            placeholder="All case types"
+            placeholder={t("cases.allCaseTypes")}
             options={[
-              { value: "all", label: "All case types" },
-              ...CASE_TYPES.map((t) => ({ value: t, label: CASE_TYPE_LABEL[t] })),
+              { value: "all", label: t("cases.allCaseTypes") },
+              ...CASE_TYPES.map((caseTypeKey) => ({
+                value: caseTypeKey,
+                label: t(`catalog.caseType.${caseTypeKey}`),
+              })),
             ]}
           />
           <Select
@@ -191,12 +197,15 @@ export default function Cases() {
               setSlaState(value);
               setPage(1);
             }}
-            ariaLabel="Filter by SLA state"
+            ariaLabel={t("cases.slaFilter")}
             className="w-full sm:w-44"
-            placeholder="Any SLA state"
+            placeholder={t("cases.anySla")}
             options={[
-              { value: "all", label: "Any SLA state" },
-              ...SLA_STATES.map((s: SlaState) => ({ value: s, label: SLA_LABEL[s] })),
+              { value: "all", label: t("cases.anySla") },
+              ...SLA_STATES.map((s: SlaState) => ({
+                value: s,
+                label: t(`catalog.sla.${s}`),
+              })),
             ]}
           />
           <Checkbox
@@ -206,20 +215,23 @@ export default function Cases() {
               setMine(value);
               setPage(1);
             }}
-            label="Assigned to me"
+            label={t("cases.assignedToMe")}
           />
         </div>
 
         <FilterChips
-          legend="Filter by status"
-          options={CASE_STATUSES.map((s) => ({ value: s, label: CASE_STATUS_LABEL[s] }))}
+          legend={t("cases.statusFilter")}
+          options={CASE_STATUSES.map((s) => ({
+            value: s,
+            label: t(`catalog.caseStatus.${s}`),
+          }))}
           selected={statuses}
           onToggle={toggleStatus}
         />
       </Card>
 
       <DataTable
-        caption="Cases"
+        caption={t("cases.title")}
         columns={columns}
         rows={query.data?.items ?? []}
         rowKey={(row) => row.id}
@@ -242,11 +254,11 @@ export default function Cases() {
         empty={
           <EmptyState
             icon={FileStack}
-            title={hasFilters ? "No cases match these filters" : "No cases yet"}
+            title={hasFilters ? t("cases.noMatches") : t("cases.noCases")}
             description={
               hasFilters
-                ? "Try widening the search or clearing a status chip."
-                : "Create the first case to see the pipeline in action."
+                ? t("cases.noMatchesDescription")
+                : t("cases.noCasesDescription")
             }
             action={
               hasFilters ? (
@@ -262,14 +274,14 @@ export default function Cases() {
                     setPage(1);
                   }}
                 >
-                  Clear filters
+                  {t("cases.clearFilters")}
                 </button>
               ) : can(role, "case.create") ? (
                 <Link
                   to="/cases/new"
                   className={buttonVariants({ variant: "primary", size: "sm" })}
                 >
-                  Create a case
+                  {t("cases.createCase")}
                 </Link>
               ) : null
             }
@@ -283,7 +295,7 @@ export default function Cases() {
               total={query.data.total}
               size={query.data.size}
               onPageChange={setPage}
-              label="cases"
+              label={t("dashboard.casesUnit")}
             />
           ) : null
         }

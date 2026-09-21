@@ -74,7 +74,8 @@ Kubernetes resolves against Docker Hub.
 */}}
 {{- define "wathiq.image" -}}
 {{- $registry := required "image.registry must be set (the ACR login server)" .root.Values.image.registry -}}
-{{- printf "%s/%s:%s" $registry .name (.root.Values.image.tag | default .root.Chart.AppVersion) -}}
+{{- $tag := default (.root.Values.image.tag | default .root.Chart.AppVersion) (get . "tag") -}}
+{{- printf "%s/%s:%s" $registry .name $tag -}}
 {{- end -}}
 
 {{/*

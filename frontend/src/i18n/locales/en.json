@@ -43,7 +43,63 @@
     "export": "Export CSV",
     "filters": "Filters",
     "clear": "Clear",
-    "apply": "Apply"
+    "apply": "Apply",
+    "refresh": "Refresh",
+    "collapse": "Collapse",
+    "mainNavigation": "Main navigation",
+    "accountMenu": "Account menu"
+  },
+  "roles": {
+    "ops_officer": "Operations Officer",
+    "reviewer": "Reviewer",
+    "supervisor": "Supervisor",
+    "admin": "Administrator",
+    "auditor": "Auditor"
+  },
+  "roleDescriptions": {
+    "ops_officer": "Creates cases, uploads documents and tracks their progress.",
+    "reviewer": "Works the review queue: approve, correct or reject doubtful fields.",
+    "supervisor": "Handles escalations and SLA breaches, and sees the team dashboards.",
+    "admin": "Manages document types, prompts, rules, users and integrations.",
+    "auditor": "Read-only access to every case and the full audit trail."
+  },
+  "catalog": {
+    "caseStatus": {
+      "intake": "Intake",
+      "processing": "Processing",
+      "needs_review": "Needs review",
+      "in_review": "In review",
+      "approved": "Approved",
+      "posting": "Posting",
+      "completed": "Completed",
+      "rejected": "Rejected",
+      "failed": "Failed"
+    },
+    "caseType": {
+      "kyc_refresh": "Corporate KYC refresh",
+      "salary_certificate": "Salary certificate"
+    },
+    "sla": {
+      "on_track": "On track",
+      "at_risk": "At risk",
+      "breached": "Breached",
+      "none": "No SLA"
+    },
+    "priority": {
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "critical": "Critical"
+    }
   },
   "states": {
     "errorTitle": "Something went wrong",
@@ -51,6 +107,16 @@
     "emptyTitle": "Nothing here yet",
     "forbiddenTitle": "Not allowed for your role",
     "notFoundTitle": "Page not found"
+  },
+  "pagination": {
+    "label": "Pagination",
+    "range": "{{first}}–{{last}} of {{total}} {{label}}",
+    "page": "Page {{page}} of {{pages}}"
+  },
+  "sla": {
+    "over": "{{time}} over",
+    "left": "{{time}} left",
+    "due": "{{state}} · due {{date}}"
   },
   "login": {
     "title": "Sign in",
@@ -62,6 +128,148 @@
     "demoSubtitle": "One click per role — synthetic accounts, synthetic data.",
     "trust1": "Every extracted value carries its confidence and its source region.",
     "trust2": "Humans review only what the system is genuinely unsure about.",
-    "trust3": "Every action is written to an append-only audit trail."
+    "trust3": "Every action is written to an append-only audit trail.",
+    "signInAs": "Sign in as {{role}}",
+    "signingIn": "Signing in…"
+  },
+  "dashboard": {
+    "greeting": "Good to see you, {{name}}",
+    "there": "there",
+    "description": "Operational health of the document pipeline — volumes, confidence, handling time and the findings that drive review.",
+    "kpiRegion": "Key performance indicators",
+    "kpiError": "KPIs could not be loaded",
+    "caseVolume": "Case volume",
+    "caseVolumeDescription": "Straight-through versus human-reviewed, by day.",
+    "statusSplit": "Status split",
+    "statusSplitDescription": "Where every case currently sits.",
+    "fieldConfidence": "Field confidence",
+    "fieldConfidenceDescription": "Calibrated confidence across extracted fields.",
+    "handlingTime": "Handling time",
+    "handlingTimeDescription": "p50 and p90 end-to-end, by day.",
+    "topFindings": "Top findings",
+    "topFindingsDescription": "What sends cases to a human most often.",
+    "noVolume": "No volume yet",
+    "noVolumeDescription": "Cases will appear here once processed.",
+    "noCases": "No cases yet",
+    "noExtractions": "No extractions yet",
+    "noTimings": "No timings yet",
+    "noFindings": "No findings recorded",
+    "casesUnit": "cases",
+    "straightThrough": "Straight-through",
+    "humanReviewed": "Human reviewed",
+    "fields": "Fields",
+    "kpis": {
+      "casesToday": "Cases today",
+      "total": "{{count}} total",
+      "straightThrough": "Straight-through",
+      "noHuman": "no human touched it",
+      "reviewRate": "Review rate",
+      "sentToHuman": "sent to a human",
+      "avgHandling": "Avg handling time",
+      "slaBreaches": "SLA breaches",
+      "avgCost": "Avg cost / case",
+      "modelOcr": "model + OCR",
+      "openReviews": "Open reviews"
+    }
+  },
+  "cases": {
+    "title": "Cases",
+    "description": "Every document package in the pipeline, with its status, confidence and SLA.",
+    "searchPlaceholder": "Search reference or customer…",
+    "searchLabel": "Search cases",
+    "caseTypeFilter": "Filter by case type",
+    "allCaseTypes": "All case types",
+    "slaFilter": "Filter by SLA state",
+    "anySla": "Any SLA state",
+    "assignedToMe": "Assigned to me",
+    "statusFilter": "Filter by status",
+    "openFindings": "{{count}} open",
+    "noMatches": "No cases match these filters",
+    "noMatchesDescription": "Try widening the search or clearing a status chip.",
+    "noCases": "No cases yet",
+    "noCasesDescription": "Create the first case to see the pipeline in action.",
+    "clearFilters": "Clear filters",
+    "createCase": "Create a case",
+    "columns": {
+      "reference": "Reference",
+      "customer": "Customer",
+      "type": "Type",
+      "status": "Status",
+      "confidence": "Confidence",
+      "documents": "Docs",
+      "findings": "Findings",
+      "sla": "SLA",
+      "updated": "Updated"
+    }
+  },
+  "newCase": {
+    "title": "New case",
+    "description": "Create a customer case, attach the document package, and watch the agent pipeline run it end to end.",
+    "startAnother": "Start another case",
+    "caseDetails": "Case details",
+    "syntheticOnly": "Synthetic customers only — this environment never holds real records.",
+    "customerNameEn": "Customer name (English)",
+    "customerNameAr": "Customer name (Arabic)",
+    "customerNameArHint": "Optional — used for the bilingual cross-check.",
+    "caseType": "Case type",
+    "priority": "Priority",
+    "notes": "Notes for the reviewer",
+    "notesHint": "Anything a human should know before deciding.",
+    "notesPlaceholder": "Renewal after a change of shareholders; trade licence was reissued last month.",
+    "documents": "Documents",
+    "createAndStart": "Create and start",
+    "whatNext": "What happens next",
+    "whatNextDescription": "The same {{count}} steps run for every case.",
+    "started": "Case started",
+    "startedDescription": "{{reference}} is now processing.",
+    "startError": "Could not start the case",
+    "errors": {
+      "customerName": "Customer name is required",
+      "notesLength": "Notes must be 2,000 characters or fewer",
+      "files": "Attach at least one document."
+    },
+    "stages": {
+      "creating": "Creating case…",
+      "uploading_one": "Uploading {{count}} document…",
+      "uploading_other": "Uploading {{count}} documents…",
+      "starting": "Starting the pipeline…"
+    }
+  },
+  "pipeline": {
+    "intake": { "label": "Intake", "description": "Documents received and stored" },
+    "ocr": { "label": "Read text", "description": "Text pulled out of each document" },
+    "guardrails": { "label": "Guardrails", "description": "Prompt shield, content safety, PII tokenised for logs" },
+    "supervisor": { "label": "Classify and plan", "description": "Decide what each document is, then dispatch a worker for each" },
+    "extract": { "label": "Extract (parallel)", "description": "One worker per document, self-correcting on validation errors" },
+    "critic": { "label": "Critic", "description": "A second, independent read challenges every value" },
+    "investigate": { "label": "Investigate", "description": "Screening and registry checks, in a bounded ReAct loop" },
+    "validate": { "label": "Validate", "description": "Versioned rules, policy citations, calibrated confidence" },
+    "review_gate": { "label": "Review gate", "description": "Human-in-the-loop interrupt" },
+    "finalize": { "label": "Finalize", "description": "Close the case and audit" }
+  },
+  "dropzone": {
+    "title": "Drag documents here",
+    "description": "Trade licence, Emirates ID, passport, memorandum of association or salary certificate. PDF, PNG, JPEG or TIFF up to {{size}} each.",
+    "choose": "Choose files",
+    "chooseLabel": "Choose documents to upload",
+    "tooMany": "Only {{count}} documents can be uploaded at once.",
+    "invalidType": "{{name}}: only PDF, PNG, JPEG and TIFF are accepted.",
+    "tooLarge": "{{name}}: larger than {{size}}.",
+    "duplicate": "{{name}}: already added.",
+    "remove": "Remove {{name}}"
+  },
+  "pipelineProgress": {
+    "title": "Pipeline",
+    "description": "Live progress for {{reference}}.",
+    "viewCase": "View case",
+    "progress": "Pipeline progress",
+    "waitingToStart": "Waiting for the pipeline to start.",
+    "streamDropped": "The live stream dropped. The case keeps processing on the server — open it to see the final state.",
+    "parked": "The pipeline paused at the review gate and is waiting for a reviewer. Its checkpoint resumes from this exact point after a decision.",
+    "noFrames": "The stream closed without progress frames. Open the case to see its current state.",
+    "thread": "Conductor workflow / LangGraph thread",
+    "copyThread": "Copy thread id",
+    "rawStream_one": "Raw stream ({{count}} frame)",
+    "rawStream_other": "Raw stream ({{count}} frames)"
   }
 }

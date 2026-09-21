@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { ClipboardCheck, Eye, ShieldCheck, UserCog, Users } from "lucide-react";
 import type { DemoUser, Role } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ROLE_ICON: Record<Role, LucideIcon> = {
@@ -32,6 +33,8 @@ export function DemoUserCards({
   pendingRole: Role | null;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
+
   return (
     <ul className="grid gap-2 sm:grid-cols-2">
       {users.map((user) => {
@@ -44,7 +47,7 @@ export function DemoUserCards({
               disabled={disabled}
               onClick={() => onSelect(user.role)}
               aria-busy={busy}
-              aria-label={`Sign in as ${user.title}`}
+              aria-label={t("login.signInAs", { role: t(`roles.${user.role}`) })}
               className="group flex h-full w-full items-start gap-3 rounded-[var(--radius)] border border-border bg-surface p-3 text-start transition-colors hover:border-primary/40 hover:bg-primary-soft/40 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-primary-soft text-primary">
@@ -52,13 +55,13 @@ export function DemoUserCards({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-small font-semibold text-ink">
-                  {user.title}
+                  {t(`roles.${user.role}`)}
                 </span>
                 <span className="mt-0.5 block text-caption leading-4 text-ink-2">
-                  {user.description}
+                  {t(`roleDescriptions.${user.role}`)}
                 </span>
                 <span className="mt-1 block truncate text-caption text-ink-2/80" dir="ltr">
-                  {busy ? "Signing in…" : user.email}
+                  {busy ? t("login.signingIn") : user.email}
                 </span>
               </span>
             </button>

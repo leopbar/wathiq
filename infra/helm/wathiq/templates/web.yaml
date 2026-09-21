@@ -40,7 +40,7 @@ spec:
       {{- end }}
       containers:
         - name: web
-          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-web") }}
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-web" "tag" .Values.web.image.tag) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: API_HOST

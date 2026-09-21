@@ -11,9 +11,10 @@ doubtful cases to a human — with every step evidenced and audited.
 
 </div>
 
-> **Status:** M1–M4 complete. M5 adds measured Quality Lab suites, golden documents, reviewer
-> regression snapshots, prompt-version diagnostics and optional MLflow tracking. Real model
-> wording sensitivity awaits M6; demo mode explicitly reports it as unsupported.
+> **Status:** M1–M6 complete; M7 polish is in progress. The Azure deployment exercises real OCR,
+> model extraction, safety, storage and telemetry behind trusted HTTPS. M7 is completing the
+> bilingual Arabic/RTL experience, the second use case, failure-mode gallery, screenshots and demo
+> script.
 > Progress: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ---
