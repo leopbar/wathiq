@@ -37,6 +37,8 @@ description = "Values that look like secrets and are public by definition"
   regexes = [
     # Key Vault Secrets User — read secret values
     '''4633458b-17de-408a-b874-0445c86b69e6''',
+    # Key Vault Secrets Officer — write secret values (deploy.sh creates the two secrets)
+    '''b86a8fe4-44ce-4948-aee5-eccb2c155cd7''',
     # Cognitive Services OpenAI User — call a model deployment
     '''5e0bd9bd-7b93-4f28-af87-19fc36ad61bd''',
     # Cognitive Services User — call Document Intelligence and Content Safety

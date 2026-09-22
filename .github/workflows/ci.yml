@@ -24,19 +24,23 @@ jobs:
       # replacing them and allowlists only exact, named values — the Azure built-in role
       # definition GUIDs, which are public, identical in every tenant, and grant nothing on
       # their own. No file or rule is exempted wholesale.
+      # The image is pinned: `latest` changed its built-in allowlist under us once already.
       - name: Run gitleaks in Docker
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:latest \
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 \
             detect --source=/repo --config=/repo/.gitleaks.toml \
             --redact --no-banner --verbose
 
       # The allowlist must not have blinded the scanner: a planted key has to still be caught.
+      # The canary is random on every run. A published example key (such as AWS's documentation
+      # key) is on gitleaks' own allowlist and is never flagged. Only the canary file is scanned,
+      # so a finding here cannot come from anywhere else in the repository.
       - name: The scanner must still catch a real secret
         run: |
-          printf 'aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"\n' \
-            > canary-secret.env
-          if docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:latest \
-               detect --source=/repo --config=/repo/.gitleaks.toml \
+          token="ghp_$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 36)"
+          printf 'GITHUB_TOKEN=%s\n' "$token" > canary-secret.env
+          if docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 \
+               detect --source=/repo/canary-secret.env --config=/repo/.gitleaks.toml \
                --no-git --redact --no-banner; then
             rm -f canary-secret.env
             echo "::error::gitleaks did not flag a planted secret - the config is too permissive"
