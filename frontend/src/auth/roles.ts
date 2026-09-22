@@ -12,6 +12,7 @@ export type Capability =
   | "settings"
   | "settings.users"
   | "audit"
+  | "gallery"
   | "about";
 
 const ALL: Role[] = ["ops_officer", "reviewer", "supervisor", "admin", "auditor"];
@@ -29,6 +30,7 @@ const CAPABILITIES: Record<Capability, Role[]> = {
   settings: ["supervisor", "admin", "auditor"],
   "settings.users": ["admin"],
   audit: ALL,
+  gallery: ALL,
   about: ALL,
 };
 

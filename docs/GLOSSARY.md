@@ -386,8 +386,8 @@ proof that it works on unseen data.
 **Azure AI Foundry** — Microsoft's hosted home for models. Wathiq calls a *deployment* in it for
 extraction. Like renting a specific engine rather than buying the factory.
 
-**Deployment (of a model)** — a named, sized instance of a model you can call. `gpt-4o-mini` is the
-model; `gpt-4o-mini` as deployed in Wathiq's account, with 30 units of capacity, is the deployment.
+**Deployment (of a model)** — a named, sized instance of a model you can call. `gpt-4.1-mini` is the
+model; `gpt-4.1-mini` as deployed in Wathiq's account, with 30 units of capacity, is the deployment.
 Like a phone number for one particular office of a company.
 
 **Structured outputs** — telling the model the exact JSON shape its answer must take, so the
@@ -474,7 +474,7 @@ restarting cannot fix it and would kill every case mid-run.
 scheduler packs nodes by requests; limits stop one container taking the node down with it.
 
 **Quota pool** — how Azure meters model capacity: per subscription, per region, per model, per SKU.
-Two accounts in one subscription share it. This is why Wathiq deploys `gpt-4o-mini` — so it draws
+Two accounts in one subscription share it. This is why Wathiq deploys `gpt-4.1-mini` — so it draws
 on a pool the existing system does not use and cannot throttle it.
 
 **Soft delete / purge** — a deleted Key Vault or Cognitive Services account is recoverable for a
@@ -491,3 +491,20 @@ document text.
 **Trace vs audit trail** — different questions. The audit trail says what happened to *this case*
 and who did it; it stays in the bank's database and is append-only. A trace says why something was
 slow or how often a check fires *across all cases*, and it leaves the building. Wathiq has both.
+
+## Added in M7
+
+**Case-type profile** — a small YAML file saying what one kind of case is: which documents it
+expects, which core-banking record it writes, and which names must be checked in the registry.
+*Like the order form for one product: the factory is the same, the form says what to build.*
+
+**Income verification** — the record use case 2 writes to core banking: a verified salary on a
+person's file, used for a loan decision. *Like the bank stamping "salary confirmed" in your file.*
+
+**Employer check** — asking the company registry whether the employer on a salary certificate is
+a registered company that is still trading. *Like phoning the company to check it exists before
+trusting the letter it wrote.*
+
+**Failure-mode gallery** — a screen listing the ways a case can go wrong and what Wathiq does about
+each, with a button that stages the failure live. *Like a fire drill: you show the alarm works by
+setting it off, safely.*

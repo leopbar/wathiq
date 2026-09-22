@@ -8,12 +8,25 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.agent import graph
+from app.casetypes import load_profiles
 from app.core.config import settings
-from app.core.deps import DbSession
-from app.db.enums import IntegrationStatus
+from app.core.deps import CurrentUser, DbSession
+from app.db.enums import DocTypeKey, IntegrationStatus
 from app.process import health as process_health
-from app.schemas.system import GraphDiagram, ServiceStatus, SystemInfo
-from app.services.catalog import diagrams, integrations, stack
+from app.schemas.system import (
+    CaseTypeProfileOut,
+    ExpectedDocument,
+    GraphDiagram,
+    ServiceStatus,
+    SystemInfo,
+)
+from app.services.catalog import (
+    DOC_TYPE_LABELS,
+    DOC_TYPE_LABELS_AR,
+    diagrams,
+    integrations,
+    stack,
+)
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -116,3 +129,29 @@ async def graph_diagram() -> GraphDiagram:
     graph we are not running. M3 adds the workers, the critic and the investigator to it.
     """
     return GraphDiagram(mermaid=graph.mermaid(), source="live")
+
+
+@router.get("/case-types", response_model=list[CaseTypeProfileOut])
+async def case_types(_user: CurrentUser) -> list[CaseTypeProfileOut]:
+    """Every case-type profile, for the intake screen and Settings."""
+    return [
+        CaseTypeProfileOut(
+            id=profile.id,
+            version=profile.version,
+            title_en=profile.title_en,
+            title_ar=profile.title_ar,
+            customer_kind=profile.customer_kind,
+            expected_documents=[
+                ExpectedDocument(
+                    key=key,
+                    label_en=DOC_TYPE_LABELS[DocTypeKey(key)],
+                    label_ar=DOC_TYPE_LABELS_AR[DocTypeKey(key)],
+                )
+                for key in profile.expected_documents
+            ],
+            posting_tool=profile.posting_tool,
+            posting_record=profile.posting_record,
+            registry_checks=[f"{c.document}.{c.field}" for c in profile.registry_checks],
+        )
+        for profile in load_profiles().values()
+    ]

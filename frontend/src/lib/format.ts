@@ -2,7 +2,7 @@ import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import { ar, enUS } from "date-fns/locale";
 import i18n from "@/i18n";
 
-function isArabic(): boolean {
+export function isArabic(): boolean {
   return i18n.resolvedLanguage?.startsWith("ar") ?? false;
 }
 
@@ -67,14 +67,17 @@ export function formatUsd(value: number | null | undefined): string {
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
-  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const u = isArabic()
+    ? { ms: " ملي ث", s: "ث", m: "د", h: "س" }
+    : { ms: " ms", s: "s", m: "m", h: "h" };
+  if (ms < 1000) return `${Math.round(ms)}${u.ms}`;
   const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}${u.s}`;
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
-  if (minutes < 60) return `${minutes}m ${rest}s`;
+  if (minutes < 60) return `${minutes}${u.m} ${rest}${u.s}`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  return `${hours}${u.h} ${minutes % 60}${u.m}`;
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -122,4 +125,12 @@ export function titleCase(value: string): string {
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Picks the Arabic variant of a bilingual API value when the interface is in Arabic and the
+ * API sent one; otherwise the English value.
+ */
+export function localized(en: string, ar: string | null | undefined): string {
+  return isArabic() && ar ? ar : en;
 }

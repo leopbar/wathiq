@@ -1,4 +1,5 @@
 import { FileText, Image as ImageIcon, Languages } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Document } from "@/lib/types";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -28,8 +29,12 @@ export function DocumentList({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   if (documents.length === 0) {
-    return <EmptyState title="No documents" description="This case has no files attached." />;
+    return <EmptyState
+        title={t("caseDetail.documents.empty")}
+        description={t("caseDetail.documents.emptyDescription")}
+      />;
   }
 
   return (
@@ -60,17 +65,19 @@ export function DocumentList({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-small font-medium text-ink">
-                  {document.doc_type_label}
+                  {t(`catalog.docType.${document.doc_type}`, { defaultValue: document.doc_type_label })}
                 </span>
-                <span className="block truncate text-caption text-ink-2">{document.filename}</span>
+                <span className="block truncate text-caption text-ink-2" dir="ltr">
+                  {document.filename}
+                </span>
                 <span className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <Badge tone={STATUS_TONE[document.status]}>{document.status}</Badge>
+                  <Badge tone={STATUS_TONE[document.status]}>{t(`caseDetail.documents.status.${document.status}`)}</Badge>
                   <Badge tone="outline">
                     <Languages className="h-3 w-3" aria-hidden />
                     {LANGUAGE_LABEL[document.language]}
                   </Badge>
                   <span className="text-caption text-ink-2 tabular">
-                    {formatBytes(document.size_bytes)}
+                    <bdi>{formatBytes(document.size_bytes)}</bdi>
                   </span>
                 </span>
               </span>

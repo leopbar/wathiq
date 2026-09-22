@@ -11,10 +11,9 @@ doubtful cases to a human — with every step evidenced and audited.
 
 </div>
 
-> **Status:** M1–M6 complete; M7 polish is in progress. The Azure deployment exercises real OCR,
-> model extraction, safety, storage and telemetry behind trusted HTTPS. M7 is completing the
-> bilingual Arabic/RTL experience, the second use case, failure-mode gallery, screenshots and demo
-> script.
+> **Status:** M1–M7 complete. The Azure deployment exercises real OCR, model extraction, safety,
+> storage and telemetry behind trusted HTTPS. M7 added the bilingual Arabic/RTL interface, the
+> second use case by configuration, and the failure-mode gallery.
 > Progress: [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ---
@@ -123,11 +122,45 @@ live inside the app on the **About the system** screen.
 | 5 | Review workspace | Queue with SLA timers; document and fields side by side; approve / correct / reject with reason codes and keyboard shortcuts |
 | 6 | Quality Lab | Five test bands, regression history, calibration curve |
 | 7 | Prompt Studio | Semantic versions, diffs, evaluation scores, approve / retire |
-| 8 | Settings | Document types, users, integration status (Connected / Simulated / Demo) |
-| 9 | Audit log | Searchable append-only trail with CSV export |
-| 10 | About the system | Live architecture diagrams and the stack with reasons |
+| 8 | Failure gallery | Every way a case can go wrong, what catches it, and a button that stages it live |
+| 9 | Settings | Document types, users, integration status (Connected / Simulated / Demo) |
+| 10 | Audit log | Searchable append-only trail with CSV export |
+| 11 | About the system | Live architecture diagrams and the stack with reasons |
 
-*Screenshots are added in M7.*
+### What it looks like
+
+Every screenshot below is the running system on synthetic data.
+
+**A finished case — fields, confidence, and the one id that links workflow, agent and audit trail**
+
+![Case detail](docs/screenshots/04-case-fields.png)
+
+**The evidence behind the decision: the agent's own tool calls and guardrail results**
+
+![Assurance tab](docs/screenshots/05-case-assurance.png)
+
+**The business process, read from the case's own event log**
+
+![Process tab](docs/screenshots/06-case-process.png)
+
+**The failure gallery: each entry is staged live, or names the tests that prove it**
+
+![Failure gallery](docs/screenshots/07-failure-gallery.png)
+
+**The same screen in Arabic, with the layout mirrored**
+
+![Failure gallery in Arabic](docs/screenshots/10-failure-gallery-arabic.png)
+
+<details>
+<summary>More screens: dashboard, cases, intake, review queue, Quality Lab, sign-in</summary>
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/02-dashboard.png) | ![Cases](docs/screenshots/03-cases.png) |
+| ![New case](docs/screenshots/08-new-case.png) | ![Review queue](docs/screenshots/11-review-queue.png) |
+| ![Quality Lab](docs/screenshots/12-quality-lab.png) | ![Dashboard in Arabic](docs/screenshots/09-dashboard-arabic.png) |
+
+</details>
 
 ---
 

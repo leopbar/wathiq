@@ -284,4 +284,38 @@ CUSTOMERS: list[dict[str, Any]] = [
         "last_refreshed": "2022-05-30",
         "risk_rating": "high",
     },
+    # Individuals, for use case 2: a salary certificate is written to a person's file. The
+    # names match people the demo database seeds, so a salary case can find its customer.
+    {
+        "customer_id": "SIM-CUS-200001",
+        "name": "Mariam Al Hashimi",
+        "segment": "Retail",
+        "kyc_status": "current",
+        "last_refreshed": "2025-06-03",
+        "risk_rating": "low",
+    },
+    {
+        "customer_id": "SIM-CUS-200002",
+        "name": "Priya Nair",
+        "segment": "Retail",
+        "kyc_status": "current",
+        "last_refreshed": "2025-01-21",
+        "risk_rating": "low",
+    },
+    {
+        "customer_id": "SIM-CUS-200003",
+        "name": "Daniel Osei",
+        "segment": "Retail",
+        "kyc_status": "current",
+        "last_refreshed": "2024-11-09",
+        "risk_rating": "medium",
+    },
+    {
+        "customer_id": "SIM-CUS-200004",
+        "name": "Hamad Al Suwaidi",
+        "segment": "Retail",
+        "kyc_status": "current",
+        "last_refreshed": "2025-03-30",
+        "risk_rating": "low",
+    },
 ]

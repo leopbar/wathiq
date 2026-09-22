@@ -44,3 +44,24 @@ class SystemInfo(BaseModel):
 class GraphDiagram(BaseModel):
     mermaid: str
     source: Literal["live", "planned"]
+
+
+class ExpectedDocument(BaseModel):
+    key: str
+    label_en: str
+    label_ar: str
+
+
+class CaseTypeProfileOut(BaseModel):
+    """A case-type profile as the intake screen shows it. Read from the same YAML the engine
+    reads, so the screen cannot promise documents or a destination the engine does not use."""
+
+    id: str
+    version: str
+    title_en: str
+    title_ar: str
+    customer_kind: str
+    expected_documents: list[ExpectedDocument]
+    posting_tool: str
+    posting_record: str
+    registry_checks: list[str]

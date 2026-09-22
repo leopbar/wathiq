@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 export function Dialog({
@@ -20,6 +21,7 @@ export function Dialog({
   footer?: ReactNode;
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
@@ -42,7 +44,7 @@ export function Dialog({
               ) : null}
             </div>
             <RadixDialog.Close
-              aria-label="Close dialog"
+              aria-label={t("common.closeDialog")}
               className="rounded-[var(--radius-sm)] p-1 text-ink-2 hover:bg-surface-2 hover:text-ink"
             >
               <X className="h-4 w-4" aria-hidden />
@@ -76,6 +78,7 @@ export function Sheet({
   children: ReactNode;
   width?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
@@ -96,7 +99,7 @@ export function Sheet({
               ) : null}
             </div>
             <RadixDialog.Close
-              aria-label="Close panel"
+              aria-label={t("common.closePanel")}
               className="rounded-[var(--radius-sm)] p-1 text-ink-2 hover:bg-surface-2 hover:text-ink"
             >
               <X className="h-4 w-4" aria-hidden />

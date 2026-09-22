@@ -17,6 +17,9 @@ all end with one posting.
 rejected, no matching customer, or the server not configured. "Nothing was posted" is an
 audit answer, and it has to be written down.
 
+**Which record** is written comes from the case type's profile (`app/casetypes/`): a KYC
+refresh for use case 1, an income verification for use case 2. This module never names either.
+
 Everything here talks to the *simulated* core banking MCP server. Nothing reaches a real bank.
 """
 
@@ -33,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agent.tools import ToolBroker
+from app.casetypes import profile_for
 from app.db import models
 from app.db.enums import ActorType, CaseStatus, PostingStatus, ReviewDecision, ReviewStatus
 from app.db.session import SessionLocal
@@ -58,7 +62,8 @@ def idempotency_key(case: models.Case) -> str:
     decision to run the business process again, and should be allowed to post again. Retrying
     a step inside the same instance is not.
     """
-    return f"{case.thread_id}:kyc_refresh:{POSTING_CONTRACT_VERSION}"
+    record = profile_for(case.case_type.value).posting_record
+    return f"{case.thread_id}:{record}:{POSTING_CONTRACT_VERSION}"
 
 
 class Approval:
@@ -203,7 +208,7 @@ async def post_case(case_id: UUID) -> dict[str, Any]:
                 case,
                 key=key,
                 status=PostingStatus.skipped,
-                note="The case was rejected, so no refresh was posted.",
+                note="The case was rejected, so nothing was posted.",
             )
             await db.commit()
             return _result(posting)
@@ -239,7 +244,28 @@ async def post_case(case_id: UUID) -> dict[str, Any]:
             await db.commit()
             return _result(posting)
 
-        # --- find the customer file the refresh belongs to ---
+        profile = profile_for(case.case_type.value)
+        values = {
+            field.name: (field.corrected_value or field.value or "") for field in case.fields
+        }
+        missing = [name for name in profile.required_fields if not values.get(name)]
+        if missing:
+            posting = await _record(
+                db,
+                case,
+                key=key,
+                status=PostingStatus.skipped,
+                approval=approval,
+                note=(
+                    f"The {profile.posting_record.replace('_', ' ')} record needs "
+                    f"{', '.join(missing)}, and the approved case has no value for "
+                    f"{'it' if len(missing) == 1 else 'them'}. Nothing was posted."
+                ),
+            )
+            await db.commit()
+            return _result(posting)
+
+        # --- find the customer file the result belongs to ---
         lookup = await broker.call("core_banking", "get_customer", name=case.customer_name)
         customer = (lookup.result or {}).get("customer") if lookup.ok else None
         if not customer:
@@ -251,7 +277,7 @@ async def post_case(case_id: UUID) -> dict[str, Any]:
                 approval=approval,
                 note=(
                     f"No customer matching '{case.customer_name}' in the simulated core "
-                    "banking system, so there is no file to refresh."
+                    "banking system, so there is no file to write to."
                 ),
                 response=lookup.result if lookup.ok else {"error": lookup.error},
             )
@@ -259,12 +285,9 @@ async def post_case(case_id: UUID) -> dict[str, Any]:
             return _result(posting)
 
         # --- post ---
-        values = {
-            field.name: (field.corrected_value or field.value or "") for field in case.fields
-        }
         call = await broker.call(
             "core_banking",
-            "post_kyc_refresh",
+            profile.posting_tool,
             case_id=str(case.id),
             customer_id=str(customer.get("customer_id", "")),
             idempotency_key=key,

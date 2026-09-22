@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, MinusCircle, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SystemInfo } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -26,6 +27,7 @@ const COLOUR: Record<ServiceStatus, string> = {
 };
 
 export function ServiceList({ services }: { services: SystemInfo["services"] }) {
+  const { t } = useTranslation();
   return (
     <ul className="divide-y divide-border">
       {services.map((service) => {
@@ -37,7 +39,7 @@ export function ServiceList({ services }: { services: SystemInfo["services"] }) 
               <p className="truncate text-small font-medium text-ink">{service.name}</p>
               <p className="text-caption leading-4 text-ink-2">{service.detail}</p>
             </div>
-            <Badge tone={TONE[service.status]}>{service.status}</Badge>
+            <Badge tone={TONE[service.status]}>{t(`about.serviceState.${service.status}`)}</Badge>
           </li>
         );
       })}

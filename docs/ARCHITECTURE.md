@@ -221,9 +221,9 @@ Four MCP servers, each its own process and its own container:
 | Server | Can write? | Tools | Which node may call it |
 |---|---|---|---|
 | document-store | no (volume mounted read-only) | `read_document`, `find_in_document`, `list_case_documents` | critic, investigator |
-| company-registry (simulated) | no | `lookup_by_license`, `search_by_name`, `reconcile_names` | investigator |
+| company-registry (simulated) | no | `lookup_by_license`, `search_by_name`, `reconcile_names`, `verify_employer` (M7) | investigator |
 | sanctions (simulated sample list) | no | `screen_name`, `describe_list` | investigator |
-| core-banking (simulated) | **yes** | `get_customer`, `post_kyc_refresh`, `get_posting` | post (M4) only |
+| core-banking (simulated) | **yes** | `get_customer`, `post_kyc_refresh`, `post_income_verification` (M7), `get_posting` | post (M4) only |
 
 Two independent locks on the only server that can write: the investigator is never given its
 address, and the broker in the API refuses the call by name even if it were. The Settings screen
@@ -419,6 +419,44 @@ route to core banking at all.
 One `Standard_D2s_v3` node carries the whole stack, because M4's in-process workflow engine implements
 the same `ProcessEngine` interface as Conductor and needs no separate orchestrator. `infra/README.md`
 has the costed list and the runbook.
+
+---
+
+## 7. Adding a use case: configuration, not engine code (M7)
+
+Use case 2 (salary certificates for a personal loan) is five files. The engine reads them; nothing
+in the graph, the workflow or the posting step names either use case.
+
+```mermaid
+flowchart LR
+  subgraph config["Configuration (one set per use case)"]
+    DT["Document type<br/>fields, labels EN/AR, critical flags"]
+    RP["Rule pack YAML<br/>total ≥ basic, recent, IBAN shape"]
+    PR["Extraction prompt<br/>(versioned in Prompt Studio)"]
+    EX["RAG few-shot examples"]
+    CP["Case-type profile YAML<br/>documents, posting tool, registry checks"]
+  end
+  subgraph engine["Engine (unchanged)"]
+    G["LangGraph<br/>classify → extract → validate → investigate → review gate"]
+    W["Conductor workflow"]
+    P["Posting step"]
+  end
+  DT --> G
+  RP --> G
+  PR --> G
+  EX --> G
+  CP -->|registry checks| G
+  CP -->|tool + record| P
+  W --> G
+  W --> P
+  P -->|post_income_verification| CB["core-banking MCP<br/>(simulated)"]
+  G -->|verify_employer| REG["company-registry MCP<br/>(simulated)"]
+```
+
+The MCP servers gained two tools for use case 2 — `verify_employer` (read-only, investigator
+only) and `post_income_verification` (write, posting step only) — each added to exactly one
+node's allowlist. The simulated core-banking server refuses an income record on a company's file
+and a KYC refresh on a person's (DECISIONS #80–82).
 
 ---
 

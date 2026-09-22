@@ -42,6 +42,7 @@ from app.agent.ocr import get_ocr
 from app.agent.state import CaseState, DocumentState, FieldState, FindingState, WorkerInput
 from app.agent.tools import ToolBroker
 from app.agent.worker import extract_document
+from app.casetypes import profile_for
 from app.db import models
 from app.db.enums import ActorType, DocTypeKey, Severity
 from app.db.session import SessionLocal
@@ -552,7 +553,9 @@ async def investigator_node(state: CaseState) -> dict[str, Any]:
     """Answer what the documents cannot answer, using MCP tools, in a bounded ReAct loop."""
     started = time.perf_counter()
     broker = ToolBroker.for_node("investigator")
-    questions = investigator_module.plan(_values_by_doc(state))
+    questions = investigator_module.plan(
+        _values_by_doc(state), profile_for(state["case_type"])
+    )
     outcome = await investigator_module.investigate(questions, broker)
 
     for step in outcome.steps:

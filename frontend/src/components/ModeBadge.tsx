@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Cloud, FlaskConical } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { apiFetch } from "@/lib/api";
 import type { ModeInfo } from "@/lib/types";
 import { qk } from "@/lib/query";
@@ -17,14 +18,15 @@ export function useMode() {
 }
 
 export function ModeBadge() {
+  const { t } = useTranslation();
   const { data, isPending, isError } = useMode();
 
   if (isPending) return <Skeleton className="h-5 w-16 rounded-full" />;
   if (isError || !data) {
     return (
-      <Tooltip content="The API did not answer the mode probe.">
+      <Tooltip content={t("mode.probeFailed")}>
         <span className="inline-flex">
-          <Badge tone="outline">MODE ?</Badge>
+          <Badge tone="outline">{t("mode.unknown")}</Badge>
         </span>
       </Tooltip>
     );
@@ -35,8 +37,8 @@ export function ModeBadge() {
     <Tooltip
       content={
         demo
-          ? `Demo mode · v${data.version} — fake model, local services, synthetic data. Nothing leaves this machine.`
-          : `Azure mode · v${data.version} — real Azure AI services are in use.`
+          ? t("mode.demoHint", { version: data.version })
+          : t("mode.azureHint", { version: data.version })
       }
     >
       <span className="inline-flex">
@@ -46,7 +48,7 @@ export function ModeBadge() {
           ) : (
             <Cloud className="h-3 w-3" aria-hidden />
           )}
-          {data.mode.toUpperCase()}
+          {t(`mode.badge.${data.mode}`, { defaultValue: data.mode.toUpperCase() })}
         </Badge>
       </span>
     </Tooltip>

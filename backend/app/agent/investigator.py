@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.agent.tools import ToolBroker
+from app.casetypes import CaseProfile
 
 MAX_STEPS = 6
 
@@ -85,16 +86,33 @@ class Outcome:
         }
 
 
-def plan(values_by_doc: dict[str, dict[str, str | None]]) -> list[Question]:
+def plan(
+    values_by_doc: dict[str, dict[str, str | None]],
+    profile: CaseProfile | None = None,
+) -> list[Question]:
     """Work out what has to be asked of the outside world, before asking anything.
 
-    Two kinds of question arise on a KYC refresh:
+    Three kinds of question arise:
 
     * **Screening** — policy KYC-POL-006 §3.1 requires every named party to be screened. This
       is asked on every case, not only doubtful ones.
     * **Reconciliation** — where two documents disagree about a name, the registry decides.
+    * **Registry checks** — names the case type's profile says must belong to a registered,
+      trading company (the employer on a salary certificate). Declared in configuration, so a
+      new use case adds a check without adding code here.
     """
     questions: list[Question] = []
+
+    for check in profile.registry_checks if profile else []:
+        name = (values_by_doc.get(check.document) or {}).get(check.field)
+        if name:
+            questions.append(
+                Question(
+                    kind="registry_check",
+                    prompt=f"Is the {check.role} {name!r} a registered company that is trading?",
+                    payload={"name": name, "role": check.role, "policy": check.policy},
+                )
+            )
 
     licence_name = (values_by_doc.get("trade_license") or {}).get("company_name_en")
     moa_name = (values_by_doc.get("moa") or {}).get("company_name_en")
@@ -418,7 +436,91 @@ async def _handle_sanctions(question: Question, broker: ToolBroker, outcome: Out
     )
 
 
+async def _handle_registry_check(
+    question: Question, broker: ToolBroker, outcome: Outcome
+) -> None:
+    started = time.perf_counter()
+    name = question.payload["name"]
+    role = question.payload["role"]
+    policy = question.payload["policy"]
+    call = await broker.call("company_registry", "verify_employer", name=name)
+    result = call.result or {}
+
+    if not call.ok:
+        observation = f"the registry could not be reached ({call.error})"
+        outcome.findings.append(
+            {
+                "code": "REGISTRY_UNAVAILABLE",
+                "severity": "warning",
+                "title": "The company registry could not be reached",
+                "description": (
+                    f"The {role} {name!r} was not checked: {call.error}. A person must "
+                    "check it."
+                ),
+                "policy_citation": policy,
+                "source": "investigator",
+            }
+        )
+        outcome.review_reasons.append(
+            {"code": "EMPLOYER_NOT_VERIFIED", "label": f"The {role} could not be checked"}
+        )
+    elif not result.get("found"):
+        observation = f"no registered company matches {name!r}"
+        outcome.findings.append(
+            {
+                "code": "EMPLOYER_NOT_REGISTERED",
+                "severity": "critical",
+                "title": f"The {role} is not in the registry",
+                "description": (
+                    f"{name!r} does not match any company in the simulated registry. Income "
+                    f"from an {role} that cannot be found is not evidence of anything; a person "
+                    "must establish who the employer is."
+                ),
+                "policy_citation": policy,
+                "source": "investigator",
+            }
+        )
+        outcome.review_reasons.append(
+            {"code": "EMPLOYER_NOT_VERIFIED", "label": f"The {role} is not a registered company"}
+        )
+    else:
+        registered = result.get("registered_name")
+        status = str(result.get("status", "unknown"))
+        observation = f"{registered} — status {status}"
+        if not result.get("active"):
+            outcome.findings.append(
+                {
+                    "code": "EMPLOYER_NOT_ACTIVE",
+                    "severity": "critical",
+                    "title": f"The {role} is {status} in the registry",
+                    "description": (
+                        f"{registered!r} is {status} in the simulated registry. A salary "
+                        "certificate from a company that is not trading needs a person to "
+                        "confirm the income is real."
+                    ),
+                    "policy_citation": policy,
+                    "source": "investigator",
+                }
+            )
+            outcome.review_reasons.append(
+                {"code": "EMPLOYER_NOT_VERIFIED", "label": f"The {role} is {status}"}
+            )
+
+    outcome.steps.append(
+        Step(
+            index=len(outcome.steps) + 1,
+            thought=question.prompt,
+            action="company_registry.verify_employer",
+            action_input={"name": name},
+            observation=observation,
+            ok=call.ok,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+    )
+
+
 _HANDLERS = {
+    "registry_check": _handle_registry_check,
     "company_name_mismatch": _handle_mismatch,
     "licence_status": _handle_licence_status,
     "sanctions": _handle_sanctions,

@@ -287,8 +287,9 @@ async def seed_cases(
         case = models.Case(
             reference=f"WTQ-{year}-{index:04d}",
             case_type=case_type,
-            customer_name=company["en"],
-            customer_name_ar=company["ar"],
+            # A salary certificate is written to the employee's file; the company is the employer.
+            customer_name=person["en"] if is_salary else company["en"],
+            customer_name_ar=person["ar"] if is_salary else company["ar"],
             status=status,
             risk_level=(
                 RiskLevel.high

@@ -1,4 +1,5 @@
 import { Check, CircleDashed, Loader2, PauseCircle, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 /**
@@ -33,8 +34,9 @@ const RING: Record<StepState, string> = {
 };
 
 export function Stepper({ steps }: { steps: StepperStep[] }) {
+  const { t } = useTranslation();
   return (
-    <ol className="space-y-0" aria-label="Pipeline progress">
+    <ol className="space-y-0" aria-label={t("stepper.label")}>
       {steps.map((step, index) => {
         const Icon = ICON[step.state];
         const isLast = index === steps.length - 1;
@@ -70,7 +72,7 @@ export function Stepper({ steps }: { steps: StepperStep[] }) {
                 )}
               >
                 {step.label}
-                <span className="sr-only"> — {step.state}</span>
+                <span className="sr-only"> — {t(`stepper.state.${step.state}`)}</span>
               </p>
               <p className="mt-0.5 text-small text-ink-2">{step.message ?? step.description}</p>
             </div>

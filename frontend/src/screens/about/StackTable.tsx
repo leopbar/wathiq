@@ -1,27 +1,29 @@
+import { useTranslation } from "react-i18next";
 import type { SystemInfo } from "@/lib/types";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
 
 export function StackTable({ stack }: { stack: SystemInfo["stack"] }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       {stack.map((layer) => (
         <Card key={layer.layer} className="overflow-hidden">
           <CardHeader
             title={layer.layer}
-            description="What we used, and what we deliberately did not use."
-            action={<Badge tone="outline">{layer.items.length} choices</Badge>}
+            description={t("about.stack.description")}
+            action={<Badge tone="outline">{t("about.stack.choices", { count: layer.items.length })}</Badge>}
           />
           <TableWrap className="border-0">
             <Table>
-              <caption className="sr-only">{layer.layer} stack choices</caption>
+              <caption className="sr-only">{t("about.stack.caption", { layer: layer.layer })}</caption>
               <thead>
                 <tr>
-                  <Th className="w-44">Component</Th>
-                  <Th className="w-24">Version</Th>
-                  <Th>Why we chose it</Th>
-                  <Th className="w-56">Alternative considered</Th>
+                  <Th className="w-44">{t("about.stack.component")}</Th>
+                  <Th className="w-24">{t("about.stack.version")}</Th>
+                  <Th>{t("about.stack.why")}</Th>
+                  <Th className="w-56">{t("about.stack.alternative")}</Th>
                 </tr>
               </thead>
               <tbody>

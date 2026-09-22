@@ -74,7 +74,7 @@ export function AppShell() {
               </RadixDialog.Close>
             </div>
             <RadixDialog.Description className="sr-only">
-              Main navigation menu
+              {t("common.mainNavigationMenu")}
             </RadixDialog.Description>
             <SidebarContent collapsed={false} onNavigate={() => setNavOpen(false)} />
           </RadixDialog.Content>

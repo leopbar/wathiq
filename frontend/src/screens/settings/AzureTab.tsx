@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { Cloud, KeyRound, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -7,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ListSkeleton } from "@/components/Skeletons";
 import { ErrorState } from "@/components/ErrorState";
+
+const EMPHASIS = { b: <span className="font-medium text-ink" /> };
 
 /**
  * Which Azure services this deployment actually uses.
@@ -18,6 +21,7 @@ import { ErrorState } from "@/components/ErrorState";
  * the numbers in front of them.
  */
 export function AzureTab() {
+  const { t } = useTranslation();
   const query = useQuery({
     queryKey: qk.azure,
     queryFn: () => apiFetch<AzureInfo>("/settings/azure"),
@@ -33,25 +37,31 @@ export function AzureTab() {
 
   return (
     <div className="space-y-5 pt-4">
-      <section className="flex flex-wrap items-center gap-2" aria-label="Azure mode summary">
+      <section
+        className="flex flex-wrap items-center gap-2"
+        aria-label={t("settings.azure.summaryLabel")}
+      >
         <Badge tone={info.mode === "azure" ? "success" : "info"}>
-          Mode: {info.mode}
+          {t("settings.azure.mode", { mode: info.mode })}
         </Badge>
         <Badge tone={live > 0 ? "success" : "info"}>
-          {live} of {info.services.length} services connected
+          {t("settings.azure.servicesConnected", { live, total: info.services.length })}
         </Badge>
         <Badge tone={info.auth_backend === "entra" ? "success" : "info"}>
-          Sign-in: {info.auth_backend === "entra" ? "Microsoft Entra ID" : "local accounts"}
+          {t("settings.azure.signIn", {
+            backend:
+              info.auth_backend === "entra"
+                ? "Microsoft Entra ID"
+                : t("settings.azure.localAccounts"),
+          })}
         </Badge>
-        {info.tracing_enabled ? <Badge tone="success">Tracing to Azure Monitor</Badge> : null}
+        {info.tracing_enabled ? (
+          <Badge tone="success">{t("settings.azure.tracing")}</Badge>
+        ) : null}
       </section>
 
       <p className="text-small text-ink-2">
-        Each Azure service is switched on by <span className="font-medium text-ink">its own
-        endpoint</span>, not by the mode alone. A service with no endpoint is not an error: the
-        demo implementation keeps running, and this screen names it. A service that is
-        configured and then fails is a different thing again — it raises, rather than quietly
-        falling back, so a case is never scored by something nobody chose.
+        <Trans i18nKey="settings.azure.intro" components={EMPHASIS} />
       </p>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -60,19 +70,25 @@ export function AzureTab() {
             <div className="flex items-start justify-between gap-2">
               <p className="text-small font-semibold text-ink">{service.name}</p>
               <Badge tone={service.enabled ? "success" : "neutral"}>
-                {service.enabled ? "Connected" : "Not configured"}
+                {service.enabled
+                  ? t("settings.azure.connected")
+                  : t("settings.azure.notConfigured")}
               </Badge>
             </div>
 
             <p className="mt-1.5 text-caption leading-4 text-ink-2">{service.detail}</p>
 
             {service.enabled ? (
-              <code className="mt-2 truncate text-caption text-ink-2/80" title={service.endpoint}>
+              <code
+                className="mt-2 truncate text-caption text-ink-2/80"
+                title={service.endpoint}
+                dir="ltr"
+              >
                 {service.endpoint}
               </code>
             ) : (
               <p className="mt-2 flex-1 text-caption leading-4 text-ink-2">
-                <span className="font-medium text-ink">Running instead:</span>{" "}
+                <span className="font-medium text-ink">{t("settings.azure.runningInstead")}</span>{" "}
                 {service.replaces}
               </p>
             )}
@@ -80,43 +96,31 @@ export function AzureTab() {
         ))}
       </div>
 
-      <section aria-label="How Wathiq authenticates to Azure">
-        <h3 className="label-caption mb-2 text-ink-2">Authentication</h3>
+      <section aria-label={t("settings.azure.authLabel")}>
+        <h3 className="label-caption mb-2 text-ink-2">{t("settings.azure.authHeading")}</h3>
         <Card className="space-y-2 p-4">
           <p className="flex items-center gap-2 text-small text-ink">
             <KeyRound className="size-4 shrink-0 text-ink-2" aria-hidden />
-            {info.credential}
+            <bdi>{info.credential}</bdi>
           </p>
           <p className="text-caption leading-4 text-ink-2">
-            On AKS this resolves to a <span className="font-medium text-ink">workload
-            identity</span>: the pod exchanges its Kubernetes service-account token for an Entra
-            token. No key for any Azure service is stored in the image, in a manifest or in the
-            repository. The only two secrets that exist are the database password and the JWT
-            signing key, and both are mounted from Key Vault.
+            <Trans i18nKey="settings.azure.authBody" components={EMPHASIS} />
           </p>
         </Card>
       </section>
 
-      <section aria-label="What is not connected">
-        <h3 className="label-caption mb-2 text-ink-2">Stated plainly</h3>
+      <section aria-label={t("settings.azure.notConnectedLabel")}>
+        <h3 className="label-caption mb-2 text-ink-2">{t("settings.azure.statedPlainly")}</h3>
         <Card className="space-y-2 p-4">
           <p className="flex items-start gap-2 text-caption leading-4 text-ink-2">
             <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
             <span>
-              Azure AI Search is <span className="font-medium text-ink">deliberately not
-              deployed</span>. The free tier in this subscription belongs to another system, and
-              a paid Basic service would replace a pgvector retriever that already returns real
-              policy citations. The adapter is written and tested; it is not paid for.
+              <Trans i18nKey="settings.azure.searchNote" components={EMPHASIS} />
             </span>
           </p>
           <p className="flex items-start gap-2 text-caption leading-4 text-ink-2">
             <Cloud className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <span>
-              Core banking, the company registry and the sanctions list remain simulated in every
-              mode. They are MCP tool servers with synthetic data, and the Integrations tab says
-              so. Azure mode changes how documents are read and reasoned about — not what they
-              are checked against.
-            </span>
+            <span>{t("settings.azure.simulatedNote")}</span>
           </p>
         </Card>
       </section>

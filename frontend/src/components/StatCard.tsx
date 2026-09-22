@@ -1,19 +1,22 @@
 import type { LucideIcon } from "lucide-react";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
+import { formatPercent } from "@/lib/format";
 import { Card } from "./ui/card";
 import { Tooltip } from "./ui/tooltip";
 
 export function DeltaChip({
   delta,
   invert = false,
-  suffix = "vs last week",
+  suffix,
 }: {
   delta: number | undefined;
   /** true when a rise is bad (SLA breaches, cost). */
   invert?: boolean;
   suffix?: string;
 }) {
+  const { t } = useTranslation();
   if (delta === undefined || Number.isNaN(delta)) return null;
 
   const flat = Math.abs(delta) < 0.0005;
@@ -22,7 +25,7 @@ export function DeltaChip({
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
 
   return (
-    <Tooltip content={`${(delta * 100).toFixed(1)}% ${suffix}`}>
+    <Tooltip content={`${formatPercent(delta, 1)} ${suffix ?? t("delta.vsLastWeek")}`}>
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-caption font-medium tabular",
@@ -32,7 +35,7 @@ export function DeltaChip({
         )}
       >
         <Icon className="h-3 w-3" aria-hidden />
-        {flat ? "0%" : `${up ? "+" : ""}${(delta * 100).toFixed(1)}%`}
+        <bdi>{flat ? formatPercent(0) : `${up ? "+" : ""}${formatPercent(delta, 1)}`}</bdi>
       </span>
     </Tooltip>
   );

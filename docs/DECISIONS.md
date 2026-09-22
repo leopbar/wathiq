@@ -622,7 +622,7 @@ guards are tested: pointing teardown at `filingsiq-rg` is refused at the first c
 **Why:** Azure OpenAI capacity is granted per subscription, per region, per model, per SKU — not per
 account. So a *second account* is harmless, but a deployment drawing on a pool something else
 depends on can throttle it. The existing system uses `gpt-4o` Standard and `text-embedding-3-small`
-GlobalStandard. Wathiq therefore deploys `gpt-4o-mini` Standard and `text-embedding-3-small`
+GlobalStandard. Wathiq therefore deploys `gpt-4.1-mini` Standard and `text-embedding-3-small`
 **Standard** — different pools, measured as empty before deploying. This is invisible coupling: it
 does not appear in any template, in any resource graph, or in a code review. It is recorded in
 `modules/openai.bicep` next to the parameters that would break it.
@@ -635,3 +635,39 @@ reproducible, the run consumed real quota, and Document Intelligence eventually 
 HTTP 429. The suite now injects `DemoOcr` and `DemoExtractor` explicitly. Live-provider health and
 contract checks remain separate, opt-in Azure smoke tests; a diagnostic regression run and a cloud
 availability test are different claims and must not be conflated.
+
+### 80. A case type is a profile file, and the engine reads it
+**Why:** Use case 2 was meant to arrive "by configuration only", but three things still depended
+on the case type in code: which core-banking tool posts the result, whose file it goes to, and
+which outside checks the investigator runs. Salary cases were in fact being posted as *KYC
+refreshes* to a company file. Each case type now has a YAML profile in `app/casetypes/` naming its
+expected documents, its posting tool and record, the fields the record requires, and its registry
+checks. The posting step and the investigator read the profile and never name a use case. The
+KYC profile keeps the record name `kyc_refresh`, so idempotency keys issued before profiles
+existed still match and an old case can never post twice.
+**Not chosen:** an `if case_type == ...` in the posting step (the second use case would need
+code, and so would the third), or a database table (a change to where money-relevant data is
+written should be a reviewed diff, like the rule packs — see #36).
+
+### 81. The system of record checks the kind of file, not only the approval
+**Why:** An income verification belongs on a person's file and a KYC refresh on a company's. The
+simulated core-banking server now refuses a record on the wrong kind of file, and an income record
+with no employer or total salary. Wathiq checks the required fields first and records a skip with
+the reason; the server's refusal is the second lock, recorded as a failed posting. The same
+"enforced twice, recorded always" shape as the idempotency key (#50).
+
+### 82. The employer check is declared, not coded per use case
+**Why:** A salary is only evidence if the employer is a real, trading company. The salary profile
+declares `registry_checks: salary_certificate.employer_name`; the investigator turns each declared
+check into a question and answers it with the registry's new read-only `verify_employer` tool,
+which the investigator's allowlist gains and nothing else does. A missing or non-trading employer
+is a critical finding and a review, and "could not check" stays a third outcome, never a pass.
+
+### 83. The failure-mode gallery runs through the ordinary intake, and a test runs every entry
+**Why:** A gallery that says "this is what happens when..." is a claim. Runnable entries carry
+synthetic documents; the browser downloads them and creates, uploads and starts the case through
+the same endpoints a person uses, so there is no demo-only path. `test_failure_gallery.py` runs
+every runnable entry through the real pipeline and checks the promised status and finding codes;
+entries that cannot be staged by clicking (a crash, a retry, a server going away) name the tests
+that stage them, and a test checks those tests exist. If the system changes, the gallery fails
+in CI rather than drifting into fiction.

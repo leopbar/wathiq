@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { CaseProgressEvent } from "./types";
 
 export const API_PREFIX = "/api/v1";
@@ -66,7 +67,7 @@ function redirectToLogin() {
 }
 
 async function parseError(res: Response): Promise<ApiError> {
-  let detail = res.statusText || "Request failed";
+  let detail = res.statusText || i18n.t("common.requestFailed");
   let code = `HTTP_${res.status}`;
   try {
     const body: unknown = await res.json();
@@ -95,7 +96,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (res.status === 401) {
     clearToken();
     redirectToLogin();
-    throw new ApiError(401, "Your session has expired. Please sign in again.", "UNAUTHORIZED");
+    throw new ApiError(401, i18n.t("common.sessionExpired"), "UNAUTHORIZED");
   }
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;

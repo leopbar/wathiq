@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/auth/useAuth";
 import { isReadOnly } from "@/auth/roles";
 import { PageHeader } from "@/components/PageHeader";
@@ -12,26 +13,27 @@ import { ProcessTab } from "./settings/ProcessTab";
 import { AzureTab } from "./settings/AzureTab";
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { role } = useAuth();
   const readOnly = isReadOnly(role) || role === "supervisor";
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Settings"
-        description="Document types, users, the process layer, integrations and the run mode of this deployment."
-        actions={readOnly ? <Badge tone="info">Read-only for your role</Badge> : null}
+        title={t("settings.title")}
+        description={t("settings.description")}
+        actions={readOnly ? <Badge tone="info">{t("settings.readOnly")}</Badge> : null}
       />
 
       <Tabs
         items={[
-          { value: "document-types", label: "Document types", content: <DocumentTypesTab /> },
-          { value: "users", label: "Users", content: <UsersTab /> },
-          { value: "assurance", label: "Assurance", content: <AssuranceTab /> },
-          { value: "process", label: "Process", content: <ProcessTab /> },
-          { value: "integrations", label: "Integrations", content: <IntegrationsTab /> },
-          { value: "azure", label: "Azure", content: <AzureTab /> },
-          { value: "mode", label: "Mode", content: <ModeTab /> },
+          { value: "document-types", label: t("settings.tabs.documentTypes"), content: <DocumentTypesTab /> },
+          { value: "users", label: t("settings.tabs.users"), content: <UsersTab /> },
+          { value: "assurance", label: t("settings.tabs.assurance"), content: <AssuranceTab /> },
+          { value: "process", label: t("settings.tabs.process"), content: <ProcessTab /> },
+          { value: "integrations", label: t("settings.tabs.integrations"), content: <IntegrationsTab /> },
+          { value: "azure", label: t("settings.tabs.azure"), content: <AzureTab /> },
+          { value: "mode", label: t("settings.tabs.mode"), content: <ModeTab /> },
         ]}
       />
     </div>

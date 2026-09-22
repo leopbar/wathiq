@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { ArrowUpFromLine, Hand, Inbox } from "lucide-react";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { Page, ReviewTask, SlaState } from "@/lib/types";
-import { PAGE_SIZE, SLA_LABEL, SLA_STATES } from "@/lib/constants";
+import { PAGE_SIZE, SLA_STATES } from "@/lib/constants";
 import { formatRelative } from "@/lib/format";
 import { useAuth } from "@/auth/useAuth";
 import { describeError } from "@/components/ErrorState";
@@ -21,14 +22,8 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/toggle";
 import { Pagination } from "@/components/ui/pagination";
 
-const STATUS_OPTIONS = [
-  { value: "all", label: "Any status" },
-  { value: "pending", label: "Pending" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-];
-
 export default function Review() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -59,21 +54,25 @@ export default function Review() {
     mutationFn: (taskId: string) =>
       apiFetch<ReviewTask>(`/review/tasks/${taskId}/claim`, { method: "POST" }),
     onSuccess: (task) => {
-      toast.success("Task claimed", { description: `${task.case_reference} is yours.` });
+      toast.success(t("review.claimed"), {
+        description: t("review.claimedDescription", { reference: task.case_reference }),
+      });
       void queryClient.invalidateQueries({ queryKey: ["review"] });
       navigate(`/review/${task.id}`);
     },
     onError: (error) =>
-      toast.error("Could not claim the task", { description: describeError(error).message }),
+      toast.error(t("review.claimError"), { description: describeError(error).message }),
   });
 
   const columns: Column<ReviewTask>[] = [
     {
       key: "reference",
-      header: "Case",
+      header: t("review.columns.case"),
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-medium text-ink tabular">{row.case_reference}</p>
+          <p className="truncate font-medium text-ink tabular">
+            <bdi>{row.case_reference}</bdi>
+          </p>
           <p className="truncate text-caption text-ink-2">{row.customer_name}</p>
         </div>
       ),
@@ -81,17 +80,19 @@ export default function Review() {
     },
     {
       key: "reason",
-      header: "Reason",
+      header: t("review.columns.reason"),
       cell: (row) => (
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={row.reason === "mandatory" ? "danger" : "warning"}>{row.reason_label}</Badge>
-          <code className="text-caption text-ink-2/80">{row.reason_code}</code>
+          <code className="text-caption text-ink-2/80" dir="ltr">
+            {row.reason_code}
+          </code>
           {/* The SLA timer already found this one late and moved it to the supervisor queue.
               Worth saying on the row: it explains why a reviewer no longer sees it. */}
           {row.escalated_at ? (
             <Badge tone="warning">
               <ArrowUpFromLine className="h-3 w-3" aria-hidden />
-              escalated
+              {t("review.escalated")}
             </Badge>
           ) : null}
         </div>
@@ -99,44 +100,46 @@ export default function Review() {
     },
     {
       key: "volume",
-      header: "Scope",
+      header: t("review.columns.scope"),
       cell: (row) => (
         <span className="text-small text-ink-2 tabular">
-          {row.field_count} fields · {row.open_finding_count} findings
+          {t("review.scope", { fields: row.field_count, findings: row.open_finding_count })}
         </span>
       ),
     },
     {
       key: "assignee",
-      header: "Assignee",
+      header: t("review.columns.assignee"),
       cell: (row) =>
         row.assigned_to ? (
           <span className="text-small text-ink">
-            {row.assigned_to.id === user?.id ? "You" : row.assigned_to.full_name}
+            {row.assigned_to.id === user?.id ? t("review.you") : row.assigned_to.full_name}
           </span>
         ) : (
-          <span className="text-small text-ink-2">Unclaimed</span>
+          <span className="text-small text-ink-2">{t("review.unclaimed")}</span>
         ),
     },
     {
       key: "sla",
-      header: "SLA",
+      header: t("review.columns.sla"),
       cell: (row) => <SlaTimer dueAt={row.sla_due_at} state={row.sla_state} />,
       hideOnCard: true,
     },
     {
       key: "created",
-      header: "Waiting",
+      header: t("review.columns.waiting"),
       cell: (row) => <span className="text-small text-ink-2">{formatRelative(row.created_at)}</span>,
     },
     {
       key: "action",
-      header: "Action",
+      header: t("review.columns.action"),
       cell: (row) =>
         row.status === "completed" ? (
-          <Badge tone="success">{row.decision ?? "done"}</Badge>
+          <Badge tone="success">
+            {row.decision ? t(`review.decisionValue.${row.decision}`) : t("review.done")}
+          </Badge>
         ) : row.assigned_to && row.assigned_to.id !== user?.id ? (
-          <Badge tone="neutral">Claimed</Badge>
+          <Badge tone="neutral">{t("review.claimedBadge")}</Badge>
         ) : (
           <Button
             size="sm"
@@ -149,7 +152,7 @@ export default function Review() {
             }}
           >
             <Hand className="h-3.5 w-3.5" aria-hidden />
-            {row.assigned_to?.id === user?.id ? "Continue" : "Claim"}
+            {row.assigned_to?.id === user?.id ? t("review.continue") : t("review.claim")}
           </Button>
         ),
     },
@@ -158,21 +161,34 @@ export default function Review() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Review queue"
-        description="Only the cases the system is genuinely unsure about reach this list. Claim a task to work it end to end."
+        title={t("nav.review")}
+        description={t("review.description")}
       />
 
       <Card className="flex flex-wrap items-center gap-4 p-4">
-        <Switch id="review-mine" checked={mine} onCheckedChange={(v) => { setMine(v); setPage(1); }} label="Only mine" />
+        <Switch
+          id="review-mine"
+          checked={mine}
+          onCheckedChange={(v) => {
+            setMine(v);
+            setPage(1);
+          }}
+          label={t("review.onlyMine")}
+        />
         <Select
           value={status}
           onValueChange={(value) => {
             setStatus(value);
             setPage(1);
           }}
-          ariaLabel="Filter by task status"
+          ariaLabel={t("review.statusFilter")}
           className="w-full sm:w-44"
-          options={STATUS_OPTIONS}
+          options={[
+            { value: "all", label: t("review.status.all") },
+            { value: "pending", label: t("review.status.pending") },
+            { value: "in_progress", label: t("review.status.in_progress") },
+            { value: "completed", label: t("review.status.completed") },
+          ]}
         />
         <Select
           value={slaState}
@@ -180,17 +196,17 @@ export default function Review() {
             setSlaState(value);
             setPage(1);
           }}
-          ariaLabel="Filter by SLA state"
+          ariaLabel={t("cases.slaFilter")}
           className="w-full sm:w-44"
           options={[
-            { value: "all", label: "Any SLA state" },
-            ...SLA_STATES.map((s: SlaState) => ({ value: s, label: SLA_LABEL[s] })),
+            { value: "all", label: t("cases.anySla") },
+            ...SLA_STATES.map((s: SlaState) => ({ value: s, label: t(`catalog.sla.${s}`) })),
           ]}
         />
       </Card>
 
       <DataTable
-        caption="Review queue"
+        caption={t("nav.review")}
         columns={columns}
         rows={query.data?.items ?? []}
         rowKey={(row) => row.id}
@@ -201,23 +217,23 @@ export default function Review() {
         onRowClick={(row) => navigate(`/review/${row.id}`)}
         cardTitle={(row) => (
           <div className="flex items-center justify-between gap-2">
-            <span className="font-medium text-ink tabular">{row.case_reference}</span>
+            <bdi className="font-medium text-ink tabular">{row.case_reference}</bdi>
             <SlaTimer dueAt={row.sla_due_at} state={row.sla_state} />
           </div>
         )}
         empty={
           <EmptyState
             icon={Inbox}
-            title="Nothing waiting"
+            title={t("review.emptyTitle")}
             description={
               mine
-                ? "You have no tasks assigned. Switch off “Only mine” to see the whole queue."
-                : "The queue is empty — everything the pipeline produced was confident enough to pass straight through."
+                ? t("review.emptyMine")
+                : t("review.emptyAll")
             }
             action={
               mine ? (
                 <Button size="sm" variant="secondary" onClick={() => setMine(false)}>
-                  Show the whole queue
+                  {t("review.showAll")}
                 </Button>
               ) : null
             }
@@ -231,7 +247,7 @@ export default function Review() {
               total={query.data.total}
               size={query.data.size}
               onPageChange={setPage}
-              label="tasks"
+              label={t("review.tasksUnit")}
             />
           ) : null
         }

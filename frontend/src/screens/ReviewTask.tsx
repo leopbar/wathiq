@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -30,6 +31,7 @@ import { DecisionBar } from "./review/DecisionBar";
 import { ShortcutHelp } from "./review/ShortcutHelp";
 
 export default function ReviewTask() {
+  const { t } = useTranslation();
   const { taskId = "" } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -77,15 +79,15 @@ export default function ReviewTask() {
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      toast.success("Decision recorded", {
-        description: "The graph resumes from its checkpoint with your decision.",
+      toast.success(t("reviewTask.recorded"), {
+        description: t("reviewTask.recordedDescription"),
       });
       void queryClient.invalidateQueries({ queryKey: ["review"] });
       void queryClient.invalidateQueries({ queryKey: ["cases"] });
       navigate("/review");
     },
     onError: (error) =>
-      toast.error("Decision was not saved", { description: describeError(error).message }),
+      toast.error(t("reviewTask.notSaved"), { description: describeError(error).message }),
   });
 
   const sendDecision = useCallback(() => {
@@ -137,7 +139,7 @@ export default function ReviewTask() {
         <ErrorState
           error={query.error}
           onRetry={() => void query.refetch()}
-          title="This review task could not be loaded"
+          title={t("reviewTask.loadError")}
         />
       </Card>
     );
@@ -159,12 +161,12 @@ export default function ReviewTask() {
             className="inline-flex items-center gap-1 text-small text-ink-2 hover:text-ink"
           >
             <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
-            Review queue
+            {t("nav.review")}
           </Link>
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="tabular">{task.case_reference}</span>
+            <bdi className="tabular">{task.case_reference}</bdi>
             <StatusPill status={caseDetail.status} />
           </span>
         }
@@ -182,8 +184,8 @@ export default function ReviewTask() {
             to={`/cases/${caseDetail.id}`}
             className={buttonVariants({ variant: "secondary", size: "sm" })}
           >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            Full case
+            <ExternalLink className="h-3.5 w-3.5 rtl:-scale-x-100" aria-hidden />
+            {t("reviewTask.fullCase")}
           </Link>
         }
       />
@@ -191,9 +193,18 @@ export default function ReviewTask() {
       {completed ? (
         <Card className="border-success/40 bg-success-soft/40 px-4 py-3">
           <p className="text-small text-ink">
-            This task is already completed
-            {task.decision ? ` — decision: ${task.decision}` : ""}
-            {task.decision_reason_code ? ` (${task.decision_reason_code})` : ""}.
+            {t("reviewTask.completed")}
+            {task.decision
+              ? ` — ${t("reviewTask.decisionWas", { decision: t(`review.decisionValue.${task.decision}`) })}`
+              : ""}
+            {task.decision_reason_code ? (
+              <>
+                {" ("}
+                <bdi>{task.decision_reason_code}</bdi>
+                {")"}
+              </>
+            ) : null}
+            .
           </p>
         </Card>
       ) : null}
@@ -209,15 +220,15 @@ export default function ReviewTask() {
 
         <Card className="flex min-h-[34rem] flex-col overflow-hidden">
           <CardHeader
-            title="Fields and findings"
-            description="Correct a value in place; corrections are submitted with your decision."
+            title={t("reviewTask.fieldsAndFindings")}
+            description={t("reviewTask.fieldsAndFindingsDescription")}
           />
           <Tabs
             className="min-h-0 flex-1"
             items={[
               {
                 value: "fields",
-                label: "Fields",
+                label: t("caseDetail.tabs.fields"),
                 badge: <Badge tone="neutral">{fields.length}</Badge>,
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin">
@@ -241,7 +252,7 @@ export default function ReviewTask() {
               },
               {
                 value: "findings",
-                label: "Findings",
+                label: t("caseDetail.tabs.findings"),
                 badge:
                   caseDetail.open_finding_count > 0 ? (
                     <Badge tone="warning">{caseDetail.open_finding_count}</Badge>

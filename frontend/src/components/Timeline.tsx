@@ -1,6 +1,7 @@
 import { Bot, Cog, User as UserIcon } from "lucide-react";
 import type { ActorType, TimelineEvent } from "@/lib/types";
 import { formatDateTime, formatDuration } from "@/lib/format";
+import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
 
 const ACTOR_ICON: Record<ActorType, typeof Bot> = {
@@ -16,6 +17,7 @@ const ACTOR_STYLE: Record<ActorType, string> = {
 };
 
 export function Timeline({ events }: { events: TimelineEvent[] }) {
+  const { t } = useTranslation();
   return (
     <ol className="relative space-y-0">
       {events.map((event, index) => {
@@ -43,17 +45,17 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
                 <span className="mx-1.5 text-border" aria-hidden>
                   ·
                 </span>
-                <code className="text-caption">{event.action}</code>
+                <code className="text-caption" dir="ltr">{event.action}</code>
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {event.prompt_version ? (
-                  <Badge tone="outline" title="Prompt version used for this step">
-                    prompt {event.prompt_version}
+                  <Badge tone="outline" title={t("timeline.promptTitle")}>
+                    <bdi>{t("timeline.prompt", { version: event.prompt_version })}</bdi>
                   </Badge>
                 ) : null}
                 {event.model_version ? (
-                  <Badge tone="outline" title="Model version used for this step">
-                    model {event.model_version}
+                  <Badge tone="outline" title={t("timeline.modelTitle")}>
+                    <bdi>{t("timeline.model", { version: event.model_version })}</bdi>
                   </Badge>
                 ) : null}
                 {event.duration_ms !== null ? (
@@ -63,7 +65,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
               {event.detail && Object.keys(event.detail).length > 0 ? (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-caption text-ink-2 hover:text-ink">
-                    Detail
+                    {t("common.detail")}
                   </summary>
                   <pre
                     dir="ltr"

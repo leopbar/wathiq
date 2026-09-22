@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -10,12 +11,13 @@ function lineTone(line: string): string {
 }
 
 export function DiffViewer({ diff }: { diff: string }) {
+  const { t } = useTranslation();
   const lines = diff.split("\n");
   if (lines.length === 0 || diff.trim() === "") {
     return (
       <EmptyState
-        title="No differences"
-        description="These two versions have identical prompt bodies."
+        title={t("prompts.noDiff")}
+        description={t("prompts.noDiffDescription")}
       />
     );
   }

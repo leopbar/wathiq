@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Archive, BadgeCheck, GitCompare, Sparkles } from "lucide-react";
 import { apiFetch, buildQuery } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -25,6 +26,7 @@ import { DiffViewer } from "./prompts/DiffViewer";
 import { PromptEvaluations } from "./prompts/PromptEvaluations";
 
 export default function PromptStudio() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { role } = useAuth();
   const mayApprove = can(role, "prompts.approve");
@@ -78,13 +80,14 @@ export default function PromptStudio() {
         method: "POST",
       }),
     onSuccess: (_data, variables) => {
-      toast.success(variables.action === "approve" ? "Version approved" : "Version retired", {
-        description: `v${variables.version} of ${selectedKey}.`,
-      });
+      toast.success(
+        variables.action === "approve" ? t("prompts.approved") : t("prompts.retired"),
+        { description: t("prompts.versionOf", { version: variables.version, key: selectedKey }) },
+      );
       void queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
     onError: (error) =>
-      toast.error("Action failed", { description: describeError(error).message }),
+      toast.error(t("prompts.actionFailed"), { description: describeError(error).message }),
   });
 
   const approveButton = (
@@ -96,7 +99,7 @@ export default function PromptStudio() {
       onClick={() => current && act.mutate({ action: "approve", version: current.version })}
     >
       <BadgeCheck className="h-3.5 w-3.5" aria-hidden />
-      Approve
+      {t("prompts.approve")}
     </Button>
   );
 
@@ -109,15 +112,15 @@ export default function PromptStudio() {
       onClick={() => current && act.mutate({ action: "retire", version: current.version })}
     >
       <Archive className="h-3.5 w-3.5" aria-hidden />
-      Retire
+      {t("prompts.retire")}
     </Button>
   );
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Prompt Studio"
-        description="Every prompt is versioned with semver: MAJOR changes the output schema, MINOR adds fields, PATCH rewords. The engine only ever loads a pinned, approved version."
+        title={t("nav.prompts")}
+        description={t("prompts.description")}
         actions={
           mayApprove ? (
             <div className="flex gap-2">
@@ -125,7 +128,7 @@ export default function PromptStudio() {
               {retireButton}
             </div>
           ) : (
-            <Tooltip content="Only administrators can approve or retire a prompt version.">
+            <Tooltip content={t("prompts.approveForbidden")}>
               <div className="flex gap-2">
                 {approveButton}
                 {retireButton}
@@ -137,13 +140,13 @@ export default function PromptStudio() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
         <Card className="h-fit overflow-hidden">
-          <CardHeader title="Prompts" />
+          <CardHeader title={t("prompts.listTitle")} />
           {prompts.isPending ? (
             <ListSkeleton rows={5} />
           ) : prompts.isError ? (
             <ErrorState error={prompts.error} onRetry={() => void prompts.refetch()} />
           ) : prompts.data.length === 0 ? (
-            <EmptyState icon={Sparkles} title="No prompts registered" />
+            <EmptyState icon={Sparkles} title={t("prompts.empty")} />
           ) : (
             <ul className="divide-y divide-border">
               {prompts.data.map((prompt) => (
@@ -161,14 +164,16 @@ export default function PromptStudio() {
                     )}
                   >
                     <p className="truncate text-small font-medium text-ink">{prompt.name}</p>
-                    <code className="block truncate text-caption text-ink-2">{prompt.key}</code>
+                    <code className="block truncate text-caption text-ink-2" dir="ltr">
+                      {prompt.key}
+                    </code>
                     <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <Badge tone="outline">v{prompt.latest_version}</Badge>
                       <Badge tone={prompt.status === "approved" ? "success" : "warning"}>
-                        {prompt.status}
+                        {t(`prompts.status.${prompt.status}`, { defaultValue: prompt.status })}
                       </Badge>
                       <span className="text-caption text-ink-2">
-                        {prompt.versions_count} versions
+                        {t("prompts.versionsCount", { count: prompt.versions_count })}
                       </span>
                     </span>
                   </button>
@@ -180,17 +185,20 @@ export default function PromptStudio() {
 
         <Card className="overflow-hidden">
           {!selectedKey ? (
-            <EmptyState title="Select a prompt" description="Pick a prompt to see its versions." />
+            <EmptyState
+              title={t("prompts.selectTitle")}
+              description={t("prompts.selectDescription")}
+            />
           ) : versions.isPending ? (
             <ListSkeleton rows={6} />
           ) : versions.isError ? (
             <ErrorState error={versions.error} onRetry={() => void versions.refetch()} />
           ) : sortedVersions.length === 0 ? (
-            <EmptyState title="No versions yet" />
+            <EmptyState title={t("prompts.noVersions")} />
           ) : (
             <div className="grid gap-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
               <div className="border-b border-border p-3 lg:border-b-0 lg:border-e">
-                <p className="label-caption mb-2 px-1 text-ink-2">Version history</p>
+                <p className="label-caption mb-2 px-1 text-ink-2">{t("prompts.history")}</p>
                 <VersionTimeline
                   versions={sortedVersions}
                   selected={selectedVersion}
@@ -206,11 +214,11 @@ export default function PromptStudio() {
                         v{current.version}
                       </h2>
                       <Badge tone={current.status === "approved" ? "success" : "warning"}>
-                        {current.status}
+                        {t(`prompts.status.${current.status}`, { defaultValue: current.status })}
                       </Badge>
                       {current.approved_by ? (
                         <span className="text-caption text-ink-2">
-                          approved by {current.approved_by} ·{" "}
+                          {t("prompts.approvedBy", { name: current.approved_by })} ·{" "}
                           {formatDateTime(current.approved_at)}
                         </span>
                       ) : null}
@@ -225,44 +233,55 @@ export default function PromptStudio() {
                     <Tabs
                       items={[
                         {
-                          value: "evaluations", label: "Evaluations",
-                          content: <PromptEvaluations promptKey={selectedKey} version={current.version} mayRun={can(role, "quality.run")} />,
+                          value: "evaluations",
+                          label: t("prompts.tabs.evaluations"),
+                          content: (
+                            <PromptEvaluations
+                              promptKey={selectedKey}
+                              version={current.version}
+                              mayRun={can(role, "quality.run")}
+                            />
+                          ),
                         },
                         {
                           value: "body",
-                          label: "Prompt body",
+                          label: t("prompts.tabs.body"),
                           content: (
                             <div className="pt-3">
-                              <CodeBlock code={current.body} title={`${selectedKey}@${current.version}`} />
+                              <CodeBlock
+                                code={current.body}
+                                title={`${selectedKey}@${current.version}`}
+                              />
                             </div>
                           ),
                         },
                         {
                           value: "diff",
-                          label: "Diff",
+                          label: t("prompts.tabs.diff"),
                           content: (
                             <div className="space-y-3 pt-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <GitCompare className="h-4 w-4 text-ink-2" aria-hidden />
-                                <span className="text-small text-ink-2">Compare from</span>
+                                <span className="text-small text-ink-2">{t("prompts.compareFrom")}</span>
                                 <Select
                                   value={diffFrom || undefined}
                                   onValueChange={setDiffFrom}
-                                  ariaLabel="Diff base version"
+                                  ariaLabel={t("prompts.diffBase")}
                                   className="w-40"
                                   options={sortedVersions
                                     .filter((v) => v.version !== current.version)
                                     .map((v) => ({ value: v.version, label: `v${v.version}` }))}
                                 />
                                 <span className="text-small text-ink-2">
-                                  to <span className="font-medium text-ink">v{current.version}</span>
+                                  {t("prompts.to")}{" "}
+                                  <span className="font-medium text-ink">v{current.version}</span>
                                 </span>
                               </div>
 
                               {!diffFrom || diffFrom === current.version ? (
                                 <EmptyState
-                                  title="Pick a base version"
-                                  description="Choose an earlier version to see what changed."
+                                  title={t("prompts.pickBase")}
+                                  description={t("prompts.pickBaseDescription")}
                                 />
                               ) : diff.isPending ? (
                                 <ListSkeleton rows={5} />

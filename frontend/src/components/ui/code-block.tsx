@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { Button } from "./button";
 
-export function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
+export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const { t } = useTranslation();
+  const idle = label ?? t("common.copy");
   const [copied, setCopied] = useState(false);
 
   const copy = () => {
@@ -21,8 +24,8 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
       variant="ghost"
       size="iconSm"
       onClick={copy}
-      aria-label={copied ? "Copied" : label}
-      title={copied ? "Copied" : label}
+      aria-label={copied ? t("common.copied") : idle}
+      title={copied ? t("common.copied") : idle}
     >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-success" aria-hidden />
@@ -44,6 +47,7 @@ export function CodeBlock({
   className?: string;
   maxHeight?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -52,7 +56,7 @@ export function CodeBlock({
       )}
     >
       <div className="flex items-center justify-between border-b border-border bg-surface px-3 py-1.5">
-        <span className="label-caption text-ink-2">{title ?? "Source"}</span>
+        <span className="label-caption text-ink-2">{title ?? t("common.source")}</span>
         <CopyButton value={code} />
       </div>
       <pre

@@ -15,7 +15,7 @@ export function SidebarContent({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { role } = useAuth();
   const { pathname } = useLocation();
 
@@ -62,7 +62,7 @@ export function SidebarContent({
                 return (
                   <li key={item.to}>
                     {collapsed ? (
-                      <Tooltip content={label} side="right">
+                      <Tooltip content={label} side={i18n.dir() === "rtl" ? "left" : "right"}>
                         {link}
                       </Tooltip>
                     ) : (

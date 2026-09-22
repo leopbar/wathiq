@@ -100,7 +100,7 @@ export default function Login() {
     } catch (error) {
       const message = describeError(error).message;
       setFormError(message);
-      toast.error("Demo sign-in failed", { description: message });
+      toast.error(t("login.demoFailed"), { description: message });
     } finally {
       setPendingRole(null);
     }

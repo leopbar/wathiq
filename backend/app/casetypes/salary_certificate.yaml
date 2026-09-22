@@ -1,0 +1,25 @@
+# Use case 2: a salary certificate supporting a personal loan application.
+#
+# Added by configuration. Together with the document type, the rule pack
+# (agent/rulepacks/salary_certificate.yaml), the extraction prompt and the RAG examples, this
+# file is the whole of the second use case. The engine reads it; nothing in the engine names it.
+id: salary_certificate
+version: 1.0.0
+title_en: Salary certificate (income verification)
+title_ar: شهادة راتب (التحقق من الدخل)
+# The result is written to a person's file, not a company's.
+customer_kind: individual
+expected_documents: [salary_certificate]
+
+posting:
+  tool: post_income_verification
+  record: income_verification
+  # The system of record refuses an income record without these, and so do we, earlier.
+  required_fields: [employer_name, total_salary]
+
+registry_checks:
+  # An income is only evidence if the employer is a real, trading company.
+  - document: salary_certificate
+    field: employer_name
+    role: employer
+    policy: LEN-POL-002 §1.2

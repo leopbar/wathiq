@@ -301,6 +301,21 @@ interface AuditEntry { id: string; case_id: string | null; case_reference: strin
   diagrams: { key: string; title: string; mermaid: string }[]; }
 ```
 `GET /system/graph` → `{ mermaid: string }` (live LangGraph `draw_mermaid`, M2+; M1 returns the planned graph)
+`GET /system/case-types` → the case-type profiles the engine reads (M7), signed-in users only:
+```ts
+{ id: CaseType; version: string; title_en: string; title_ar: string;
+  customer_kind: "corporate"|"individual";
+  expected_documents: { key: DocTypeKey; label_en: string; label_ar: string }[];
+  posting_tool: string; posting_record: string; registry_checks: string[] }[]
+```
+
+### Failure-mode gallery (M7)
+`GET /failure-gallery` → every scenario: `{ id, category, title_en/ar, problem_en/ar,
+detection_en/ar, outcome_en/ar, where_to_look_en/ar, runnable: boolean, case_type, customer_name,
+expected_codes: string[], files: { filename, doc_type }[], evidence: string[] }[]`.
+`GET /failure-gallery/{id}/files/{index}` → the scenario's synthetic PDF. There is deliberately
+no "run" endpoint: the browser sends these files through `POST /cases`, `/documents` and `/start`
+like any upload.
 `GET /healthz` (no prefix) → `{status:"ok"|"degraded", db:"ok"|"down", mode, version}` — **liveness**. Always 200 while the process can answer. It reports the database as a fact and deliberately does not fail on it: a liveness probe that fails on an unreachable database restarts the API in a loop for something restarting cannot fix, killing every case mid-run.
 
 `GET /readyz` (no prefix) → `{status:"ready"|"not-ready", db, mode, version}` — **readiness**, and it returns **503** when the database is unreachable. That is the whole difference: readiness decides whether this instance is in the load balancer, liveness decides whether it is killed. (M6, for the AKS deployment.)

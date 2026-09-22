@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Check, Cloud, FlaskConical, X } from "lucide-react";
 import { useMode } from "@/components/ModeBadge";
 import { titleCase } from "@/lib/format";
@@ -8,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 
 export function ModeTab() {
+  const { t } = useTranslation();
   const query = useMode();
 
   if (query.isPending) return <ListSkeleton rows={4} />;
@@ -35,28 +37,26 @@ export function ModeTab() {
           </span>
           <div>
             <p className="text-h2 font-semibold text-ink">
-              {demo ? "Demo mode" : "Azure mode"}
+              {demo ? t("settings.mode.demoTitle") : t("settings.mode.azureTitle")}
               <Badge tone="outline" className="ms-2 align-middle">
-                v{query.data.version}
+                <bdi>v{query.data.version}</bdi>
               </Badge>
             </p>
             <p className="mt-1.5 text-small leading-5 text-ink-2">
-              {demo
-                ? "Everything runs locally: a deterministic fake model, demo OCR, a simulated core banking system and synthetic data. Nothing is sent to an external service, so the demo cannot break because of a network or quota problem."
-                : "Azure AI Foundry, Document Intelligence, Content Safety and AI Search are in use with the keys from the environment. The same code paths run in both modes — only the provider behind the interface changes."}
+              {demo ? t("settings.mode.demoBody") : t("settings.mode.azureBody")}
             </p>
-            <p className="mt-2 text-caption text-ink-2">
-              The mode is configuration only. Switching it does not change a line of application
-              code.
-            </p>
+            <p className="mt-2 text-caption text-ink-2">{t("settings.mode.configOnly")}</p>
           </div>
         </div>
       </Card>
 
       <Card className="overflow-hidden">
-        <CardHeader title="Feature flags" description="What this build has switched on." />
+        <CardHeader
+          title={t("settings.mode.flagsTitle")}
+          description={t("settings.mode.flagsDescription")}
+        />
         {features.length === 0 ? (
-          <EmptyState title="No flags reported" />
+          <EmptyState title={t("settings.mode.noFlags")} />
         ) : (
           <ul className="divide-y divide-border">
             {features.map(([key, enabled]) => (
@@ -72,8 +72,12 @@ export function ModeTab() {
                     <X className="h-3 w-3" aria-hidden />
                   )}
                 </span>
-                <span className="flex-1 text-small text-ink">{titleCase(key)}</span>
-                <Badge tone={enabled ? "success" : "neutral"}>{enabled ? "on" : "off"}</Badge>
+                <span className="flex-1 text-small text-ink">
+                  {t(`settings.mode.flag.${key}`, { defaultValue: titleCase(key) })}
+                </span>
+                <Badge tone={enabled ? "success" : "neutral"}>
+                  {enabled ? t("settings.mode.on") : t("settings.mode.off")}
+                </Badge>
               </li>
             ))}
           </ul>

@@ -55,8 +55,12 @@ AI reasoning and the audit trail.
   finding cites the policy behind it.
 - **Calibrated confidence**: the number shown to a reviewer is checked against how often the system
   was actually right, so "92%" means something.
-- **New document types are configuration, not code**: salary certificates were added with a schema, a
-  prompt, rules and a golden set — the engine did not change.
+- **New use cases are configuration, not code**: salary certificates were added with a schema, a
+  prompt, rules, a golden set and a case-type profile that says where the result is posted (an
+  income verification on the employee's file) and that the employer must be a trading company.
+- **Failures are shown, not hidden**: a failure-mode gallery stages each way a case can go wrong —
+  a poisoned document, an expired licence, a sanctions near-match, a suspended employer — and a
+  test proves each one ends the way the gallery says.
 
 ## Two modes, one codebase
 - **DEMO mode** runs fully offline: a deterministic fake model, demo OCR, local file storage, local

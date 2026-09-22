@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
 import { Tooltip } from "./ui/tooltip";
 import { formatPercent } from "@/lib/format";
@@ -10,10 +11,10 @@ export function confidenceLevel(value: number): ConfidenceLevel {
   return "low";
 }
 
-const LEVEL = {
-  high: { tone: "success" as const, label: "High" },
-  medium: { tone: "warning" as const, label: "Medium" },
-  low: { tone: "danger" as const, label: "Low" },
+const LEVEL_TONE = {
+  high: "success" as const,
+  medium: "warning" as const,
+  low: "danger" as const,
 };
 
 /**
@@ -29,15 +30,17 @@ export function ConfidenceBadge({
   raw?: number | null;
   showLabel?: boolean;
 }) {
+  const { t } = useTranslation();
   if (value === null || value === undefined) {
     return (
-      <Badge tone="outline" title="No confidence recorded">
-        n/a
+      <Badge tone="outline" title={t("confidence.none")}>
+        {t("common.notAvailable")}
       </Badge>
     );
   }
   const level = confidenceLevel(value);
-  const { tone, label } = LEVEL[level];
+  const tone = LEVEL_TONE[level];
+  const label = t(`confidence.level.${level}`);
 
   const badge = (
     <Badge tone={tone}>
@@ -52,7 +55,10 @@ export function ConfidenceBadge({
     <Tooltip
       content={
         <span>
-          Calibrated {formatPercent(value, 1)} · raw model score {formatPercent(raw, 1)}
+          {t("confidence.tooltip", {
+            calibrated: formatPercent(value, 1),
+            raw: formatPercent(raw, 1),
+          })}
         </span>
       }
     >

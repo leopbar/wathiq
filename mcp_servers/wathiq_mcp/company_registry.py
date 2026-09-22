@@ -138,5 +138,45 @@ def reconcile_names(name_a: str, name_b: str) -> dict[str, Any]:
     }
 
 
+# Below this, a name is a different company, not a spelling of it. Stricter than the search,
+# because this answer is used as evidence that an income is real.
+EMPLOYER_MATCH_THRESHOLD = 0.8
+
+
+@server.tool(
+    title="Verify an employer",
+    description=(
+        "Added for salary certificates. Says whether an employer name belongs to a registered "
+        "company and whether that company is trading (active=true). Accepts the registered "
+        "name or a known alias. Simulated data."
+    ),
+)
+def verify_employer(name: str) -> dict[str, Any]:
+    best_company: dict[str, Any] | None = None
+    best_score = 0.0
+    for company in COMPANIES:
+        score = max(
+            similarity(name, candidate)
+            for candidate in [company["registered_name"], *company["aliases"]]
+        )
+        if score > best_score:
+            best_score, best_company = score, company
+
+    if best_company is None or best_score < EMPLOYER_MATCH_THRESHOLD:
+        return {
+            "found": False,
+            "query": name,
+            "best_score": round(best_score, 3),
+            "simulated": True,
+            "note": "No company in the simulated registry matches this employer name.",
+        }
+    return {
+        "found": True,
+        "query": name,
+        "active": best_company["status"] == "active",
+        **_public(best_company, match_score=round(best_score, 3)),
+    }
+
+
 if __name__ == "__main__":  # pragma: no cover - container entry point
     serve(server, DEFAULT_PORT)

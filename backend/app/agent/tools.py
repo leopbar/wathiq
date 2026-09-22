@@ -45,11 +45,16 @@ SERVERS: dict[str, tuple[str, str, bool]] = {
 # Which tools each node of the graph is allowed to call. This table is the least-privilege
 # policy, in one readable place.
 #
-# Note what the investigator does NOT have: `core_banking.post_kyc_refresh`. The investigator
-# reads the world; only the posting step (M4) writes to it, and only after a human approved.
+# Note what the investigator does NOT have: any core-banking write. The investigator reads the
+# world; only the posting step (M4) writes to it, and only after a human approved.
 NODE_TOOLS: dict[str, dict[str, list[str]]] = {
     "investigator": {
-        "company_registry": ["lookup_by_license", "search_by_name", "reconcile_names"],
+        "company_registry": [
+            "lookup_by_license",
+            "search_by_name",
+            "reconcile_names",
+            "verify_employer",
+        ],
         "sanctions": ["screen_name"],
         "document_store": ["read_document", "find_in_document", "list_case_documents"],
     },
@@ -58,7 +63,12 @@ NODE_TOOLS: dict[str, dict[str, list[str]]] = {
     },
     # Wired in M4, when posting happens after approval.
     "post": {
-        "core_banking": ["get_customer", "post_kyc_refresh", "get_posting"],
+        "core_banking": [
+            "get_customer",
+            "post_kyc_refresh",
+            "post_income_verification",
+            "get_posting",
+        ],
     },
 }
 

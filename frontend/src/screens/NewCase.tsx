@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Rocket } from "lucide-react";
@@ -30,6 +30,12 @@ type FormValues = {
 
 type Errors = Partial<Record<keyof FormValues | "files", string>>;
 
+/** The case-type profile the engine reads, so this screen cannot ask for the wrong documents. */
+interface CaseTypeProfile {
+  id: string;
+  expected_documents: { key: string; label_en: string; label_ar: string }[];
+}
+
 interface StartedCase {
   id: string;
   reference: string;
@@ -37,7 +43,7 @@ interface StartedCase {
 }
 
 export default function NewCase() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const schema = useMemo(
     () =>
@@ -57,6 +63,16 @@ export default function NewCase() {
   const [priority, setPriority] = useState("normal");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
+  const profiles = useQuery({
+    queryKey: ["case-types"],
+    queryFn: () => apiFetch<CaseTypeProfile[]>("/system/case-types"),
+    staleTime: 60 * 60_000,
+  });
+  const expected = (profiles.data ?? [])
+    .find((profile) => profile.id === caseType)
+    ?.expected_documents.map((document) =>
+      i18n.language === "ar" ? document.label_ar : document.label_en,
+    );
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
@@ -241,6 +257,13 @@ export default function NewCase() {
                   {" "}
                   *
                 </span>
+              </p>
+              <p className="text-caption text-ink-2">
+                {expected?.length
+                  ? t("newCase.expected", {
+                      documents: expected.join(i18n.language === "ar" ? "، " : ", "),
+                    })
+                  : t("newCase.expectedUnknown")}
               </p>
               <Dropzone files={files} onChange={setFiles} disabled={busy || Boolean(started)} />
               {errors.files ? (

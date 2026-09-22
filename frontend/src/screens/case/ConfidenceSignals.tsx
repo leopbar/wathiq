@@ -1,4 +1,6 @@
+import { useTranslation } from "react-i18next";
 import type { ConfidenceSignal } from "@/lib/types";
+import { formatPercent } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 /**
@@ -15,6 +17,7 @@ export function ConfidenceSignals({
   signals: ConfidenceSignal[];
   className?: string;
 }) {
+  const { t } = useTranslation();
   if (signals.length === 0) return null;
 
   return (
@@ -27,10 +30,13 @@ export function ConfidenceSignals({
             <div className="flex items-baseline justify-between gap-2">
               <dt className="text-caption text-ink-2">
                 {signal.label}
-                <span className="text-ink-2/70"> · weight {Math.round(signal.weight * 100)}%</span>
+                <span className="text-ink-2/70">
+                  {" "}
+                  · {t("caseDetail.signals.weight", { weight: formatPercent(signal.weight) })}
+                </span>
               </dt>
               <dd className="text-caption tabular text-ink-2">
-                {Math.round(signal.value * 100)}%
+                {formatPercent(signal.value)}
               </dd>
             </div>
             <div

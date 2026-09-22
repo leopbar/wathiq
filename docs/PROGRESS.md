@@ -2,16 +2,16 @@
 
 Plan: [PLAN.md](PLAN.md)
 
-**Current status:** M6 (Azure mode) is committed at `0683dfc`; M7 polish is in progress on
-`codex/m7-polish`. The live AKS deployment now has an Azure DNS hostname, trusted automatic HTTPS,
-and redirect-only HTTP. M7 started with the bilingual interface foundation: persisted RTL on reload,
-locale-aware formatting, and Arabic coverage for login, navigation, dashboard, cases, new-case
-intake, shared status labels, SLA timers and pagination.
+**Current status:** M7 (polish) is complete on `codex/m7-polish`, awaiting commit and PR
+approval; M6 (Azure mode) is committed at `0683dfc` on the same branch. M7 finished the bilingual
+Arabic/RTL interface across every screen, made the second use case configuration-driven through
+case-type profiles, and added the failure-mode gallery, the README screenshots and the demo script.
 
-**Verified:** 291 backend tests, 26 MCP, 33 Playwright; ruff, eslint, tsc and the production
+**Verified:** 326 backend tests, 34 MCP, 44 Playwright (plus an opt-in screenshot spec); ruff,
+eslint, tsc and the production
 build clean. Bicep compiles with zero warnings; the default in-process Helm release renders 16
 resources (15 schema-valid, 1 CRD supplied by the AKS add-on); shellcheck clean. A test proves
-demo mode loads no Azure SDK.
+demo mode loads no Azure SDK, and another runs every staged failure through the real pipeline.
 
 **Protecting the existing system:** this subscription runs a live application in `filingsiq-rg`.
 Wathiq never touches it — resource-group scope, an exact-match allow-list in both scripts, its own
@@ -22,7 +22,8 @@ existing system does not use. The teardown guard is tested against `filingsiq-rg
 (`WTQ-2026-0031`), checkpoint assurance, and an ADLS SAS document fetch all passed. The resource
 group remains intentionally live because development is continuing in Azure.
 
-**Remaining:** teardown is deferred until Azure development finishes; then commit/push/PR approval.
+**Remaining:** commit, push and the M6+M7 pull request, all of which need the user's approval.
+Azure teardown is deferred until development in Azure finishes.
 
 **Two things deliberately not claimed.** Azure AI Search is written and tested but **not
 deployed** — the free tier belongs to the other system and Basic costs ~USD 74/month to replace a
@@ -522,12 +523,47 @@ rather than stopping at "the template compiles".
   and 87 checks in 17.8 seconds with no Azure AI calls.
 
 ## M7 — Polish
-- [~] UI/UX refinement pass (live desktop-width audit started; core case flow refined)
-- [~] Arabic / RTL (foundation and core case flow complete; remaining specialist screens pending)
-- [ ] Use case 2 via configuration only (document type + prompt seeded in M1)
-- [ ] Failure-mode gallery
-- [ ] Final README with screenshots
-- [ ] Milestone checks + docs + commit/PR
+- [x] Arabic / RTL across every screen: interface strings in both locale files, logical CSS
+      properties, mirrored layout, direction-aware icons, LTR islands for ids, IBANs, JSON and
+      file names. `e2e/tests/rtl.spec.ts` walks each screen in Arabic and fails on a leaked
+      translation key
+- [x] Use case 2 by configuration: a **case-type profile** per use case (`app/casetypes/*.yaml`)
+      naming its expected documents, its posting tool and record, the fields that record needs,
+      and its registry checks. The posting step and the investigator read the profile; neither
+      names a use case (DECISIONS #80–82)
+- [x] Salary cases post an **income verification** to the employee's own file. Before this they
+      were posted as a *KYC refresh* against a company — found while making posting config-driven
+- [x] Two MCP tools added for use case 2: `company_registry.verify_employer` (read-only,
+      investigator only) and `core_banking.post_income_verification` (write, posting step only).
+      The simulated system of record refuses a record written to the wrong kind of customer file
+      and an income record with no employer or total salary
+- [x] Failure-mode gallery: 15 entries, each in English and Arabic. Nine are staged live through
+      the ordinary intake (create → upload → start), six name the tests that prove them.
+      `test_failure_gallery.py` runs every runnable entry through the real pipeline and asserts
+      the promised status and codes, and checks every named test exists (DECISIONS #83)
+- [x] Intake shows the documents the chosen case type expects, read from the profile the engine
+      reads — so the screen cannot ask for documents the engine does not use
+- [x] Final README with 12 screenshots of the running system, captured by an opt-in Playwright
+      spec (`e2e/tests/screenshots.spec.ts`), skipped in CI
+- [x] Backend tests: 326 passing (19 gallery + 17 use case 2 added); MCP servers: 34 (8 added);
+      Playwright: 44 passing (rtl, use case 2 and gallery suites added), plus an opt-in
+      screenshot spec that CI skips
+- [ ] Milestone checks + commit/PR
+
+### Bugs found while building M7
+- **Salary cases were posted as company KYC refreshes.** The posting step named one tool and one
+  record for every case type, so use case 2 wrote the wrong record, to a company's file. Profiles
+  fixed it, and the system of record now refuses the wrong kind of file as a second lock.
+- **Seeded salary cases named the employer as the customer.** A salary certificate belongs to the
+  employee; the company is the employer. The seed now uses the person.
+- **A tab strip clipped the panel beside it.** With five tabs in a narrow column, the browser
+  scrolled a tab into view by scrolling the whole card, silently cutting off the Process and
+  Assurance panels. Found in a screenshot, not by a test. The strip now scrolls on its own.
+- **Two docs still named `gpt-4o-mini`** although M6 moved to `gpt-4.1-mini` after the older
+  model was refused as deprecated. Corrected in DECISIONS #78 and the glossary.
+- **Headless browsers do not render PDFs.** The document viewer looked blank in every screenshot
+  and in a Chromium test. The product was fine; the capture spec now runs Firefox with its PDF
+  viewer enabled, and this is written down so the next person does not chase a phantom bug.
 
 ## Capability coverage
 - [x] LangGraph: supervisor-worker (Send API, one worker per document)
@@ -547,7 +583,8 @@ rather than stopping at "the template compiles".
       prompt and a Foundry-backed predictor, but **no wording-sensitivity score is published** —
       that needs a measured run against the live model
 - [x] MCP servers: 4 servers, least privilege per node
-- [~] MCP servers extended for use case 2 (the same servers serve it; salary-specific tools in M7)
+- [x] MCP servers extended for use case 2 (`verify_employer` and `post_income_verification`,
+      each on exactly one node's allowlist)
 - [x] Five test bands (real API/CI suites with counts, provenance and negative controls)
 - [x] Golden + regression datasets
 - [x] HITL at mandatory and dynamic points (mandatory and dynamic review tasks both created)
@@ -580,7 +617,8 @@ rather than stopping at "the template compiles".
 - [x] Infrastructure as code: 11 Bicep modules at resource-group scope, a Helm chart, and a
       teardown whose guards are tested against the subscription's live resource group
 - [x] Git, CI/CD
-- [~] Failure-mode analysis (bugs and their causes recorded per milestone; the gallery is M7)
+- [x] Failure-mode analysis (bugs and their causes recorded per milestone, and a gallery that
+      stages fifteen of them — nine live, six proven by tests)
 
 Legend: `[x]` done · `[~]` partly done, finished in a later milestone · `[ ]` not started.
 

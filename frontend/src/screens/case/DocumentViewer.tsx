@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ExternalLink, FileWarning, Maximize2, Minus, Plus, RotateCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Document, ExtractedField } from "@/lib/types";
 import { withToken } from "@/lib/api";
 import { formatBytes, formatPercent } from "@/lib/format";
@@ -22,6 +23,7 @@ export function DocumentViewer({
   highlighted: ExtractedField | null;
   className?: string;
 }) {
+  const { t, i18n } = useTranslation();
   const [zoom, setZoom] = useState(1);
   const [page, setPage] = useState(1);
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
@@ -31,8 +33,8 @@ export function DocumentViewer({
       <div className={className}>
         <EmptyState
           icon={FileWarning}
-          title="No document selected"
-          description="Pick a document on the left to preview it here."
+          title={t("caseDetail.viewer.noDocument")}
+          description={t("caseDetail.viewer.noDocumentDescription")}
         />
       </div>
     );
@@ -50,10 +52,13 @@ export function DocumentViewer({
     <div className={className}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2/60 px-3 py-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-small font-medium text-ink">{document.filename}</p>
+          <p className="truncate text-small font-medium text-ink" dir="ltr">
+            {document.filename}
+          </p>
           <p className="truncate text-caption text-ink-2">
-            {document.doc_type_label} · {formatBytes(document.size_bytes)} ·{" "}
-            {document.page_count} page{document.page_count === 1 ? "" : "s"}
+            {t(`catalog.docType.${document.doc_type}`, { defaultValue: document.doc_type_label })} ·{" "}
+            <bdi>{formatBytes(document.size_bytes)}</bdi> ·{" "}
+            {t("caseDetail.viewer.pages", { count: document.page_count })}
           </p>
         </div>
 
@@ -61,19 +66,21 @@ export function DocumentViewer({
           <Button
             variant="ghost"
             size="iconSm"
-            aria-label="Previous page"
+            aria-label={t("caseDetail.viewer.previousPage")}
             disabled={currentPage <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             <Minus className="h-3.5 w-3.5" aria-hidden />
           </Button>
           <span className="text-caption text-ink-2 tabular">
-            {currentPage}/{Math.max(document.page_count, 1)}
+            <bdi>
+              {currentPage}/{Math.max(document.page_count, 1)}
+            </bdi>
           </span>
           <Button
             variant="ghost"
             size="iconSm"
-            aria-label="Next page"
+            aria-label={t("caseDetail.viewer.nextPage")}
             disabled={currentPage >= document.page_count}
             onClick={() => setPage((p) => p + 1)}
           >
@@ -83,31 +90,31 @@ export function DocumentViewer({
           <Button
             variant="ghost"
             size="iconSm"
-            aria-label="Zoom out"
+            aria-label={t("caseDetail.viewer.zoomOut")}
             disabled={zoom <= 0.6}
             onClick={() => setZoom((z) => Math.max(0.6, Number((z - 0.2).toFixed(1))))}
           >
             <Minus className="h-3.5 w-3.5" aria-hidden />
           </Button>
-          <span className="text-caption text-ink-2 tabular">{Math.round(zoom * 100)}%</span>
+          <span className="text-caption text-ink-2 tabular">{formatPercent(zoom)}</span>
           <Button
             variant="ghost"
             size="iconSm"
-            aria-label="Zoom in"
+            aria-label={t("caseDetail.viewer.zoomIn")}
             disabled={zoom >= 2}
             onClick={() => setZoom((z) => Math.min(2, Number((z + 0.2).toFixed(1))))}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
           </Button>
-          <Button variant="ghost" size="iconSm" aria-label="Reset zoom" onClick={() => setZoom(1)}>
+          <Button variant="ghost" size="iconSm" aria-label={t("caseDetail.viewer.resetZoom")} onClick={() => setZoom(1)}>
             <RotateCw className="h-3.5 w-3.5" aria-hidden />
           </Button>
-          <Tooltip content="Open the raw file in a new tab">
+          <Tooltip content={t("caseDetail.viewer.openRaw")}>
             <a
               href={previewUrl}
               target="_blank"
               rel="noreferrer"
-              aria-label="Open document in a new tab"
+              aria-label={t("caseDetail.viewer.openInTab")}
               className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius)] text-ink-2 hover:bg-surface-2 hover:text-ink"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
@@ -125,7 +132,7 @@ export function DocumentViewer({
             <img
               key={document.id}
               src={previewUrl}
-              alt={`Preview of ${document.filename}`}
+              alt={t("caseDetail.viewer.preview", { name: document.filename })}
               className="absolute inset-0 h-full w-full rounded-[var(--radius-sm)] object-contain"
               onLoad={(event) => {
                 const { naturalWidth, naturalHeight } = event.currentTarget;
@@ -141,7 +148,7 @@ export function DocumentViewer({
             <iframe
               key={`${document.id}-${currentPage}`}
               src={`${previewUrl}#page=${currentPage}&view=FitH`}
-              title={`Preview of ${document.filename}`}
+              title={t("caseDetail.viewer.preview", { name: document.filename })}
               className="absolute inset-0 h-full w-full rounded-[var(--radius-sm)] border-0"
             />
           )}
@@ -165,27 +172,35 @@ export function DocumentViewer({
           <>
             <Maximize2 className="h-3.5 w-3.5 text-warning" aria-hidden />
             <span className="text-caption text-ink-2">
-              Showing source region for{" "}
-              <span className="font-medium text-ink">{highlighted.label_en}</span>
+              {t("caseDetail.viewer.showingRegion")}{" "}
+              <span className="font-medium text-ink">
+                {i18n.language.startsWith("ar") && highlighted.label_ar
+                  ? highlighted.label_ar
+                  : highlighted.label_en}
+              </span>
             </span>
             {highlighted.source_text ? (
               <span className="truncate text-caption text-ink-2 italic">
-                “{highlighted.source_text}”
+                “<bdi>{highlighted.source_text}</bdi>”
               </span>
             ) : null}
           </>
         ) : (
           <span className="text-caption text-ink-2">
-            Select a field to highlight where it came from.
+            {t("caseDetail.viewer.selectField")}
           </span>
         )}
         <span className="ms-auto flex items-center gap-1.5">
           {document.ocr_confidence !== null ? (
-            <Badge tone="outline">OCR {formatPercent(document.ocr_confidence)}</Badge>
+            <Badge tone="outline">
+              {t("caseDetail.viewer.ocr", { value: formatPercent(document.ocr_confidence) })}
+            </Badge>
           ) : null}
           {document.classification_confidence !== null ? (
             <Badge tone="outline">
-              Class {formatPercent(document.classification_confidence)}
+              {t("caseDetail.viewer.classification", {
+                value: formatPercent(document.classification_confidence),
+              })}
             </Badge>
           ) : null}
         </span>
