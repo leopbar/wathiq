@@ -2,8 +2,8 @@
 
 Two engines implement `ProcessEngine`:
 
-* `ConductorEngine` — Orkes Conductor owns the state machine. Durable, visible in Conductor's
-  own UI, and the one the job description names.
+* `ConductorEngine` — Orkes Conductor owns the state machine. Durable, and visible in
+  Conductor's own UI.
 * `InProcessEngine` — the same steps walked by Python in the API container. It exists because
   Conductor needs about 2 GB of RAM, and a demo must not depend on that.
 

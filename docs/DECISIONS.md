@@ -371,7 +371,7 @@ process — it is the same steps with a different scheduler. Every case records 
 a case processed by the fallback can never be mistaken for one that went through Conductor, and the
 Settings screen says plainly when `auto` had to fall back.
 **Not chosen:** making Conductor mandatory (the demo stops working on a tired laptop), or dropping
-Conductor and only ever claiming to use it (dishonest, and it is named in the job description).
+Conductor and only ever claiming to use it (dishonest: the process layer is designed around it).
 
 ### 47. A decision goes back to the engine that started the case
 **Why:** A case can sit at the human step for hours. In that time the API may have restarted, or

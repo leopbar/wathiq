@@ -81,7 +81,7 @@ must exit 1; CI verifies that exact code. Each band has a negative control. A se
 the production extractor with a broken reader and checks that golden cases fail. This proves the
 gate detects failures; it does not establish broad real-world coverage.
 
-## M5 interview explanation (five lines)
+## M5 in five lines
 I built one evaluation runner that works in the Quality Lab and in CI.
 It compares synthetic documents with independent answer keys and preserves reviewer corrections.
 I tested the gate with deliberately broken results and a broken extractor, so a green result means something.

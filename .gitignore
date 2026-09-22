@@ -54,5 +54,8 @@ Thumbs.db
 # not part of the product.
 docs/SPEC.md
 CLAUDE.md
+# Personal notes, kept locally.
+docs/int.md
+docs/DEMO_SCRIPT.md
 # Local milestone screenshots and verification artifacts
 .artifacts/

@@ -529,7 +529,7 @@ rather than stopping at "the template compiles".
 - [ ] Final README with screenshots
 - [ ] Milestone checks + docs + commit/PR
 
-## Job-description coverage (section 7)
+## Capability coverage
 - [x] LangGraph: supervisor-worker (Send API, one worker per document)
 - [x] LangGraph: self-reflection (repairs on Pydantic errors, capped at 2)
 - [x] LangGraph: actor-critic (independent grounding, shape and label checks)
@@ -590,7 +590,7 @@ Legend: `[x]` done · `[~]` partly done, finished in a later milestone · `[ ]` 
 - [x] ARCHITECTURE_DECISION_RECORD.md — 23 formal ADRs with traceability to all 79 decisions
 - [x] DECISIONS.md
 - [x] GLOSSARY.md
-- [ ] DEMO_SCRIPT.md (M7, drafted after the UI is final)
+- [ ] Demo script (M7, drafted after the UI is final; kept privately, not published)
 - [ ] Explanation notes (kept privately, not published)
 - [x] README.md (screenshots added in M7)
 - [x] API.md, DESIGN.md
