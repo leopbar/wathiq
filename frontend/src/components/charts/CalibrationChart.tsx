@@ -10,13 +10,17 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 import type { QualityCalibration } from "@/lib/types";
+import { formatPercent } from "@/lib/format";
 import { axisProps, tooltipStyles } from "./ChartTooltip";
 import { useChartPalette } from "./chartTheme";
 
 export function CalibrationChart({ data }: { data: QualityCalibration }) {
+  const { t } = useTranslation();
   const palette = useChartPalette();
   const styles = tooltipStyles(palette);
+  const samples = t("charts.samples");
 
   const points = data.points.map((p) => ({ ...p, perfect: p.predicted }));
 
@@ -29,8 +33,8 @@ export function CalibrationChart({ data }: { data: QualityCalibration }) {
           dataKey="predicted"
           domain={[0, 1]}
           ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
-          tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-          name="Predicted"
+          tickFormatter={(v: number) => formatPercent(v)}
+          name={t("charts.predicted")}
           {...axisProps(palette)}
         />
         <YAxis
@@ -38,18 +42,18 @@ export function CalibrationChart({ data }: { data: QualityCalibration }) {
           dataKey="observed"
           domain={[0, 1]}
           ticks={[0, 0.2, 0.4, 0.6, 0.8, 1]}
-          tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-          name="Observed"
+          tickFormatter={(v: number) => formatPercent(v)}
+          name={t("charts.observed")}
           width={48}
           {...axisProps(palette)}
         />
-        <ZAxis type="number" dataKey="n" range={[40, 260]} name="Samples" />
+        <ZAxis type="number" dataKey="n" range={[40, 260]} name={samples} />
         <Tooltip
           {...styles}
           formatter={(value: unknown, name: unknown) =>
-            (name === "Samples"
+            (name === samples
               ? [String(value), String(name)]
-              : [`${(Number(value) * 100).toFixed(1)}%`, String(name)]) as [string, string]
+              : [formatPercent(Number(value), 1), String(name)]) as [string, string]
           }
         />
         <Legend
@@ -59,7 +63,7 @@ export function CalibrationChart({ data }: { data: QualityCalibration }) {
         <Line
           type="linear"
           dataKey="perfect"
-          name="Perfect calibration"
+          name={t("charts.perfectCalibration")}
           stroke={palette.ink2}
           strokeDasharray="5 4"
           strokeWidth={1.5}
@@ -67,7 +71,7 @@ export function CalibrationChart({ data }: { data: QualityCalibration }) {
           activeDot={false}
           legendType="plainline"
         />
-        <Scatter name="Observed accuracy" dataKey="observed" fill={palette.primary} />
+        <Scatter name={t("charts.observedAccuracy")} dataKey="observed" fill={palette.primary} />
       </ComposedChart>
     </ResponsiveContainer>
   );

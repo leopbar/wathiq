@@ -1,0 +1,200 @@
+{{/*
+The web front end: the built React bundle, served by nginx on 8080 as a non-root user.
+
+nginx needs to write its cache and pid somewhere, and the root filesystem is read-only, so the
+three directories it touches are explicit `emptyDir` mounts. That is the read-only-root rule
+doing its job: a container that writes has to declare where.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wathiq.fullname" . }}-web
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wathiq.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      {{- if .Values.web.tls.enabled }}
+      annotations:
+        checksum/web-tls: {{ include (print $.Template.BasePath "/web-tls.yaml") . | sha256sum }}
+      {{- end }}
+      labels:
+        {{- include "wathiq.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      # The front end talks to Azure through the API, never directly, so it needs no identity.
+      automountServiceAccountToken: false
+      {{- if .Values.web.tls.enabled }}
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-web" "tag" .Values.web.image.tag) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: API_HOST
+              value: {{ include "wathiq.fullname" . }}-api
+            - name: API_PORT
+              value: {{ .Values.api.port | quote }}
+            - name: MAX_UPLOAD_SIZE
+              value: {{ .Values.web.maxUploadSize | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.port }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "wathiq.securityContext" . | nindent 12 }}
+          volumeMounts:
+            # The three paths nginx writes to. Without these it fails to start against a
+            # read-only root filesystem.
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
+            # nginx's entrypoint expands the API hostname into its config here. The image root
+            # stays read-only; only this generated config directory is writable.
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+        {{- if .Values.web.tls.enabled }}
+        - name: tls-proxy
+          image: {{ .Values.web.tls.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - caddy
+          args:
+            - run
+            - --config
+            - /etc/caddy/Caddyfile
+            - --adapter
+            - caddyfile
+          env:
+            - name: XDG_DATA_HOME
+              value: /data
+            - name: XDG_CONFIG_HOME
+              value: /config
+          ports:
+            - name: tls-http
+              containerPort: 8081
+            - name: tls-https
+              containerPort: 8443
+          livenessProbe:
+            tcpSocket:
+              port: tls-http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: tls-https
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 150m
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            # The official Caddy binary carries this file capability. Keeping it as the only
+            # capability allows the binary to execute under Kubernetes; Caddy still binds only
+            # the non-privileged 8081/8443 ports configured above.
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: caddy-config
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-runtime-config
+              mountPath: /config
+            - name: caddy-tmp
+              mountPath: /tmp
+        {{- end }}
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}
+        {{- if .Values.web.tls.enabled }}
+        - name: caddy-config
+          configMap:
+            name: {{ include "wathiq.fullname" . }}-web-tls
+        - name: caddy-data
+          persistentVolumeClaim:
+            claimName: {{ include "wathiq.fullname" . }}-web-tls
+        - name: caddy-runtime-config
+          emptyDir: {}
+        - name: caddy-tmp
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wathiq.fullname" . }}-web
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.service.azureDnsLabel }}
+  annotations:
+    service.beta.kubernetes.io/azure-dns-label-name: {{ .Values.service.azureDnsLabel | quote }}
+  {{- end }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  # LoadBalancer for the demo: one public IP to open. ClusterIP plus `kubectl port-forward`
+  # works identically and exposes nothing, which is the better choice on a shared network.
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 80
+      targetPort: {{ ternary "tls-http" "http" .Values.web.tls.enabled }}
+      name: http
+    {{- if .Values.web.tls.enabled }}
+    - port: 443
+      targetPort: tls-https
+      name: https
+    {{- end }}
+  selector:
+    {{- include "wathiq.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web

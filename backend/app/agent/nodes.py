@@ -42,10 +42,11 @@ from app.agent.ocr import get_ocr
 from app.agent.state import CaseState, DocumentState, FieldState, FindingState, WorkerInput
 from app.agent.tools import ToolBroker
 from app.agent.worker import extract_document
+from app.casetypes import profile_for
 from app.db import models
 from app.db.enums import ActorType, DocTypeKey, Severity
 from app.db.session import SessionLocal
-from app.guardrails import screen
+from app.guardrails import screen_async
 from app.rag import index as policy_index
 from app.services.events import record_event
 from app.services.storage import get_storage
@@ -93,6 +94,37 @@ async def _load_doc_types() -> dict[str, models.DocumentType]:
         return {row.key.value: row for row in rows}
 
 
+async def _load_prompt_bodies(pins: dict[str, str]) -> dict[str, str]:
+    """The text of each pinned prompt version, keyed by `"<key>@<version>"`.
+
+    Read here, in the supervisor, so the extraction workers stay free of database access —
+    they run in parallel and a model-backed one would otherwise open a connection each.
+
+    The pin is the exact version recorded on the document type, never "the newest" and never
+    "the approved one". A case must be explainable after the fact, and that requires the
+    wording that actually ran, which is why the version is stored on the case. (M6)
+    """
+    if not pins:
+        return {}
+    wanted = {value for value in pins.values() if value and "@" in value}
+    if not wanted:
+        return {}
+
+    bodies: dict[str, str] = {}
+    async with SessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(models.Prompt.key, models.PromptVersion.version, models.PromptVersion.body)
+                .join(models.PromptVersion, models.PromptVersion.prompt_id == models.Prompt.id)
+            )
+        ).all()
+    for key, version, body in rows:
+        pin = f"{key}@{version}"
+        if pin in wanted:
+            bodies[pin] = body or ""
+    return bodies
+
+
 # --------------------------------------------------------------------------- ocr
 
 
@@ -116,6 +148,9 @@ async def ocr_node(state: CaseState) -> dict[str, Any]:
                 "ocr_text": result.text,
                 "ocr_confidence": result.confidence,
                 "page_count": result.page_count,
+                # Empty unless the engine reports geometry. Checkpointed with the rest of the
+                # state, so a resumed case keeps its highlight boxes.
+                "line_boxes": [box.as_dict() for box in result.line_boxes],
             }
         )
 
@@ -150,7 +185,9 @@ async def guardrails_node(state: CaseState) -> dict[str, Any]:
     findings: list[FindingState] = []
 
     for document in state["documents"]:
-        report, _vault = screen(
+        # `screen_async` so Azure Prompt Shields and Content Safety can be asked as well when
+        # they are configured. With no endpoint set it is exactly the local `screen()`.
+        report, _vault = await screen_async(
             document["document_id"], document["filename"], document.get("ocr_text", "")
         )
         # `clean_text`, not `log_text`: the pipeline must read the real values. The vault
@@ -301,6 +338,13 @@ async def supervisor_node(state: CaseState) -> dict[str, Any]:
             detail={"evidence": evidence, "confidence": confidence},
         )
 
+    # The wording each worker will actually send (M6). One query for the whole case, before
+    # the fan-out, rather than one per worker. Empty bodies in demo mode are harmless: the
+    # deterministic extractor ignores the prompt entirely.
+    prompt_bodies = await _load_prompt_bodies(prompt_versions)
+    for item in plan:
+        item["prompt_body"] = prompt_bodies.get(str(item.get("prompt_version", "")), "")
+
     unknown = [d["filename"] for d in updated if d["doc_type"] == DocTypeKey.unknown.value]
     if unknown:
         reasons.append(
@@ -315,7 +359,15 @@ async def supervisor_node(state: CaseState) -> dict[str, Any]:
         state["case_id"],
         "agent.supervisor",
         f"Supervisor dispatched {dispatched} worker(s) in parallel",
-        detail={"plan": plan, "prompt_versions": prompt_versions},
+        # The plan is summarised for the timeline: the prompt bodies would bloat every event
+        # row, and the version pin is the thing an auditor needs.
+        detail={
+            "plan": [
+                {key: value for key, value in item.items() if key != "prompt_body"}
+                for item in plan
+            ],
+            "prompt_versions": prompt_versions,
+        },
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     return {
@@ -350,6 +402,7 @@ def fan_out(state: CaseState) -> list[Send] | str:
             "field_schema": item.get("field_schema") or [],
             "order_offset": int(item.get("order_offset", 0)),
             "prompt_version": str(item.get("prompt_version", "")),
+            "prompt_body": str(item.get("prompt_body", "")),
         }
         sends.append(Send("extract_worker", payload))
 
@@ -368,7 +421,10 @@ async def extract_worker_node(payload: WorkerInput) -> dict[str, Any]:
     document = payload["document"]
     case_id = payload["case_id"]
     fields, report = extract_document(
-        document, payload["field_schema"], order_offset=payload["order_offset"]
+        document,
+        payload["field_schema"],
+        order_offset=payload["order_offset"],
+        prompt_body=payload.get("prompt_body", ""),
     )
     report["prompt_version"] = payload.get("prompt_version", "")
 
@@ -497,7 +553,9 @@ async def investigator_node(state: CaseState) -> dict[str, Any]:
     """Answer what the documents cannot answer, using MCP tools, in a bounded ReAct loop."""
     started = time.perf_counter()
     broker = ToolBroker.for_node("investigator")
-    questions = investigator_module.plan(_values_by_doc(state))
+    questions = investigator_module.plan(
+        _values_by_doc(state), profile_for(state["case_type"])
+    )
     outcome = await investigator_module.investigate(questions, broker)
 
     for step in outcome.steps:

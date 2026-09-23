@@ -62,10 +62,32 @@ async def login(payload: LoginRequest, request: Request, db: DbSession) -> Token
     return _token_response(user)
 
 
+@router.get("/config")
+async def auth_config() -> dict[str, object]:
+    """What the sign-in screen needs to know, before anyone has signed in.
+
+    Deliberately unauthenticated — the login page reads it to decide which sign-in methods to
+    offer. It contains no secret: a tenant id and a client id are public identifiers that
+    appear in the browser's address bar during any OIDC flow. The client *secret* is never
+    here, and is never sent to a browser.
+    """
+    from app.azure import entra
+
+    return {
+        "backend": settings.auth_backend,
+        "demo_accounts_available": settings.auth_backend == "demo",
+        "entra": entra.describe(),
+    }
+
+
 @router.get("/demo-users", response_model=list[DemoUser])
 async def demo_users() -> list[DemoUser]:
-    """One-click sign-in cards. Empty list outside demo mode."""
-    if not settings.is_demo:
+    """One-click sign-in cards. Empty unless local demo authentication is selected.
+
+    Service mode and authentication are independent: the Azure-hosted demo deliberately uses
+    real Azure providers with local accounts until an Entra browser app registration exists.
+    """
+    if settings.auth_backend != "demo":
         return []
     return [
         DemoUser(
@@ -83,7 +105,7 @@ async def demo_users() -> list[DemoUser]:
 async def demo_login(
     payload: DemoLoginRequest, request: Request, db: DbSession
 ) -> TokenResponse:
-    if not settings.is_demo:
+    if settings.auth_backend != "demo":
         raise NotFoundError("Demo sign-in")
 
     result = await db.execute(

@@ -1,4 +1,5 @@
 import { RotateCcw, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ExtractedField } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Input } from "@/components/ui/input";
@@ -22,11 +23,13 @@ export function CorrectionList({
   onSelectField: (field: ExtractedField) => void;
   disabled: boolean;
 }) {
+  const { t, i18n } = useTranslation();
+  const arabic = i18n.language.startsWith("ar");
   if (fields.length === 0) {
     return (
       <EmptyState
-        title="No fields to review"
-        description="This task has no extracted fields attached."
+        title={t("reviewTask.corrections.empty")}
+        description={t("reviewTask.corrections.emptyDescription")}
       />
     );
   }
@@ -38,6 +41,7 @@ export function CorrectionList({
         const draft = drafts[field.id];
         const changed = draft !== undefined && draft !== original;
         const active = field.id === selectedFieldId;
+        const label = arabic && field.label_ar ? field.label_ar : field.label_en;
 
         return (
           <li
@@ -49,18 +53,18 @@ export function CorrectionList({
                 type="button"
                 onClick={() => onSelectField(field)}
                 className="min-w-0 flex-1 text-start"
-                aria-label={`Show source region for ${field.label_en}`}
+                aria-label={t("reviewTask.corrections.showRegion", { label })}
               >
                 <p className="flex items-center gap-1.5 text-small font-medium text-ink">
                   {field.is_critical ? (
-                    <Tooltip content="Critical field">
+                    <Tooltip content={t("reviewTask.corrections.critical")}>
                       <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-danger" />
                     </Tooltip>
                   ) : null}
-                  <span className="truncate">{field.label_en}</span>
+                  <span className="truncate">{label}</span>
                 </p>
-                <p className="truncate text-caption text-ink-2" dir="rtl">
-                  {field.label_ar}
+                <p className="truncate text-caption text-ink-2" dir={arabic ? "ltr" : "rtl"}>
+                  {arabic ? field.label_en : field.label_ar}
                 </p>
               </button>
               <ConfidenceBadge
@@ -74,7 +78,7 @@ export function CorrectionList({
               <Input
                 value={draft ?? original}
                 disabled={disabled}
-                aria-label={`Value for ${field.label_en}`}
+                aria-label={t("reviewTask.corrections.valueFor", { label })}
                 onFocus={() => onSelectField(field)}
                 onChange={(e) => onDraftChange(field.id, e.target.value)}
                 className={cn(changed && "border-info")}
@@ -83,7 +87,7 @@ export function CorrectionList({
                 <Button
                   variant="ghost"
                   size="iconSm"
-                  aria-label={`Undo correction to ${field.label_en}`}
+                  aria-label={t("reviewTask.corrections.undo", { label })}
                   onClick={() => onDraftChange(field.id, undefined)}
                 >
                   <RotateCcw className="h-3.5 w-3.5" aria-hidden />
@@ -93,13 +97,16 @@ export function CorrectionList({
 
             {changed ? (
               <p className="mt-1 text-caption text-info">
-                Was <span className="line-through">{original || "empty"}</span>
+                {t("reviewTask.corrections.was")}{" "}
+                <span className="line-through">
+                  <bdi>{original || t("reviewTask.corrections.emptyValue")}</bdi>
+                </span>
               </p>
             ) : null}
 
             {field.source_text ? (
               <p className="mt-1.5 truncate text-caption italic text-ink-2">
-                “{field.source_text}”
+                “<bdi>{field.source_text}</bdi>”
               </p>
             ) : null}
           </li>

@@ -395,6 +395,37 @@ export interface Integration {
   docs_url?: string;
 }
 
+export interface AuthConfig {
+  backend: "demo" | "entra";
+  demo_accounts_available: boolean;
+  entra: {
+    enabled: boolean;
+    authority: string;
+    client_id: string;
+    tenant_id: string;
+    scopes: string[];
+    roles: string[];
+  };
+}
+
+export interface AzureService {
+  key: string;
+  name: string;
+  enabled: boolean;
+  endpoint: string;
+  detail: string;
+  /** What runs in this service's place when it is not configured. */
+  replaces: string;
+}
+
+export interface AzureInfo {
+  mode: AppMode;
+  auth_backend: "demo" | "entra";
+  services: AzureService[];
+  credential: string;
+  tracing_enabled: boolean;
+}
+
 export interface ModeInfo {
   mode: AppMode;
   version: string;

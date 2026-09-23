@@ -95,17 +95,73 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
 
     # --- azure (only read when mode == "azure") --------------------------
+    # Every Azure service is switched on by its OWN endpoint, not by the mode alone. This is
+    # the same rule the MCP servers follow: an empty endpoint means "this service is not
+    # configured", the demo implementation keeps running, and the UI says which one answered.
+    # So `WATHIQ_MODE=azure` with only a Document Intelligence endpoint set gives you real OCR
+    # and the demo extractor — a real deployment state, not a broken one.
+    #
+    # Keys are optional everywhere. When a key is empty we use Microsoft Entra credentials
+    # (`DefaultAzureCredential`), which is what runs on AKS through workload identity. A key is
+    # only there for local development against a real service. See DECISIONS #63.
+
+    # Model provider (Azure AI Foundry / Azure OpenAI)
     azure_openai_endpoint: str = ""
     azure_openai_deployment: str = ""
+    azure_openai_embedding_deployment: str = ""
+    # `text-embedding-3-*` can return a shortened vector, and 256 is what the `policy_chunks`
+    # column is declared as. Asking the service for 256 means the Azure embedder drops into
+    # the existing schema with no migration and no second column. See DECISIONS #72.
+    azure_openai_embedding_dimensions: int = 256
     azure_openai_api_version: str = "2024-10-21"
+    azure_openai_api_key: str = ""
+    # A model call that hangs must not hold a case open, exactly like an MCP call.
+    azure_openai_timeout_seconds: float = 30.0
+    azure_openai_max_retries: int = 2
+    # Deterministic by default: an extraction that changes between runs cannot be regression-tested.
+    azure_openai_temperature: float = 0.0
+
+    # Document Intelligence
     azure_doc_intelligence_endpoint: str = ""
+    azure_doc_intelligence_key: str = ""
+    # `prebuilt-layout` returns words, lines, tables and polygons without trying to guess a
+    # document type; `prebuilt-document` also returns key-value pairs. We ask for layout and do
+    # our own field mapping, because the field schema is ours and versioned. (DECISIONS #65)
+    azure_doc_intelligence_model: str = "prebuilt-layout"
+
+    # Content Safety (also serves Prompt Shields)
     azure_content_safety_endpoint: str = ""
+    azure_content_safety_key: str = ""
+
+    # AI Search
     azure_search_endpoint: str = ""
     azure_search_index: str = "wathiq-policies"
+    azure_search_key: str = ""
+
+    # Storage (ADLS Gen2)
     azure_storage_account_url: str = ""
+    azure_storage_filesystem: str = "documents"
+    azure_storage_key: str = ""
+    # How long a viewer's SAS link stays valid. Short: the link is generated per request.
+    azure_storage_sas_minutes: int = 15
+
+    # Azure ML (calibration fitting)
+    azure_ml_subscription_id: str = ""
+    azure_ml_resource_group: str = ""
+    azure_ml_workspace: str = ""
+    azure_ml_compute: str = "wathiq-cpu"
+
+    # Monitor / Application Insights
     azure_monitor_connection_string: str = ""
+
+    # Entra ID
     entra_tenant_id: str = ""
     entra_client_id: str = ""
+    entra_client_secret: str = ""
+    # Which auth backend serves /auth. `demo` is local accounts with our own JWT; `entra`
+    # validates Microsoft Entra ID tokens against the tenant's JWKS. Separate from `mode` on
+    # purpose: signing in with Microsoft while the models stay offline is a sensible state.
+    auth_backend: Literal["demo", "entra"] = "demo"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -117,6 +173,49 @@ class Settings(BaseSettings):
     @property
     def is_demo(self) -> bool:
         return self.mode == "demo"
+
+    # --- which Azure services are actually configured --------------------
+    # One question per service, asked the same way everywhere. A service counts as configured
+    # only when the mode is `azure` AND its own endpoint is set, so a stray endpoint left in a
+    # developer's `.env` cannot quietly switch a demo into calling a paid service.
+
+    def _azure_service(self, endpoint: str) -> bool:
+        return self.mode == "azure" and bool(endpoint.strip())
+
+    @property
+    def foundry_enabled(self) -> bool:
+        return self._azure_service(self.azure_openai_endpoint) and bool(
+            self.azure_openai_deployment.strip()
+        )
+
+    @property
+    def doc_intelligence_enabled(self) -> bool:
+        return self._azure_service(self.azure_doc_intelligence_endpoint)
+
+    @property
+    def content_safety_enabled(self) -> bool:
+        return self._azure_service(self.azure_content_safety_endpoint)
+
+    @property
+    def azure_search_enabled(self) -> bool:
+        return self._azure_service(self.azure_search_endpoint)
+
+    @property
+    def adls_enabled(self) -> bool:
+        return self._azure_service(self.azure_storage_account_url)
+
+    @property
+    def azure_ml_enabled(self) -> bool:
+        return self.mode == "azure" and bool(self.azure_ml_workspace.strip())
+
+    @property
+    def azure_monitor_enabled(self) -> bool:
+        # Tracing is useful in either mode, so this one does NOT require mode == azure.
+        return bool(self.azure_monitor_connection_string.strip())
+
+    @property
+    def entra_enabled(self) -> bool:
+        return self.auth_backend == "entra" and bool(self.entra_tenant_id.strip())
 
     @property
     def sync_database_url(self) -> str:

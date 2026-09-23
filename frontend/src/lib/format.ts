@@ -1,4 +1,14 @@
 import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
+import { ar, enUS } from "date-fns/locale";
+import i18n from "@/i18n";
+
+export function isArabic(): boolean {
+  return i18n.resolvedLanguage?.startsWith("ar") ?? false;
+}
+
+function localeName(): "ar-AE" | "en-US" {
+  return isArabic() ? "ar-AE" : "en-US";
+}
 
 export function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -8,7 +18,7 @@ export function parseDate(value: string | null | undefined): Date | null {
 
 export function formatDate(value: string | null | undefined, pattern = "d MMM yyyy"): string {
   const d = parseDate(value);
-  return d ? format(d, pattern) : "—";
+  return d ? format(d, pattern, { locale: isArabic() ? ar : enUS }) : "—";
 }
 
 export function formatDateTime(value: string | null | undefined): string {
@@ -22,17 +32,24 @@ export function formatTime(value: string | null | undefined): string {
 export function formatRelative(value: string | null | undefined): string {
   const d = parseDate(value);
   if (!d) return "—";
-  return `${formatDistanceToNowStrict(d)} ago`;
+  return formatDistanceToNowStrict(d, {
+    addSuffix: true,
+    locale: isArabic() ? ar : enUS,
+  });
 }
 
 export function formatPercent(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `${(value * 100).toFixed(digits)}%`;
+  return new Intl.NumberFormat(localeName(), {
+    style: "percent",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
 }
 
 export function formatNumber(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toLocaleString("en-US", {
+  return value.toLocaleString(localeName(), {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
@@ -40,19 +57,27 @@ export function formatNumber(value: number | null | undefined, digits = 0): stri
 
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return `$${value.toFixed(value < 1 ? 3 : 2)}`;
+  return new Intl.NumberFormat(localeName(), {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 1 ? 3 : 2,
+    maximumFractionDigits: value < 1 ? 3 : 2,
+  }).format(value);
 }
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
-  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const u = isArabic()
+    ? { ms: " ملي ث", s: "ث", m: "د", h: "س" }
+    : { ms: " ms", s: "s", m: "m", h: "h" };
+  if (ms < 1000) return `${Math.round(ms)}${u.ms}`;
   const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}${u.s}`;
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
-  if (minutes < 60) return `${minutes}m ${rest}s`;
+  if (minutes < 60) return `${minutes}${u.m} ${rest}${u.s}`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  return `${hours}${u.h} ${minutes % 60}${u.m}`;
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -81,10 +106,10 @@ export function formatCountdown(ms: number): string {
   const minutes = totalMinutes % 60;
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
-    return `${days}d ${hours % 24}h`;
+    return isArabic() ? `${days}ي ${hours % 24}س` : `${days}d ${hours % 24}h`;
   }
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (hours > 0) return isArabic() ? `${hours}س ${minutes}د` : `${hours}h ${minutes}m`;
+  return isArabic() ? `${minutes}د` : `${minutes}m`;
 }
 
 export function initials(name: string): string {
@@ -100,4 +125,12 @@ export function titleCase(value: string): string {
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Picks the Arabic variant of a bilingual API value when the interface is in Arabic and the
+ * API sent one; otherwise the English value.
+ */
+export function localized(en: string, ar: string | null | undefined): string {
+  return isArabic() && ar ? ar : en;
 }

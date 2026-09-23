@@ -8,6 +8,7 @@ from app.api.v1 import (
     cases,
     dashboard,
     documents,
+    gallery,
     process_api,
     prompts,
     quality,
@@ -28,5 +29,6 @@ api_router.include_router(settings_api.router)
 api_router.include_router(process_api.router)
 api_router.include_router(audit.router)
 api_router.include_router(system.router)
+api_router.include_router(gallery.router)
 
 __all__ = ["api_router"]

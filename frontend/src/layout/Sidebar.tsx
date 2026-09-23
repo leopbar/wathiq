@@ -15,12 +15,15 @@ export function SidebarContent({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { role } = useAuth();
   const { pathname } = useLocation();
 
   return (
-    <nav className="flex-1 space-y-5 overflow-y-auto scroll-thin px-3 py-4" aria-label="Main">
+    <nav
+      className="flex-1 space-y-5 overflow-y-auto scroll-thin px-3 py-4"
+      aria-label={t("common.mainNavigation")}
+    >
       {NAV_GROUPS.map((group) => {
         const items = group.items.filter((item) => can(role, item.capability));
         if (items.length === 0) return null;
@@ -59,7 +62,7 @@ export function SidebarContent({
                 return (
                   <li key={item.to}>
                     {collapsed ? (
-                      <Tooltip content={label} side="right">
+                      <Tooltip content={label} side={i18n.dir() === "rtl" ? "left" : "right"}>
                         {link}
                       </Tooltip>
                     ) : (
@@ -125,7 +128,7 @@ export function Sidebar({
           ) : (
             <>
               <PanelLeftClose className="h-4 w-4 rtl:rotate-180" aria-hidden />
-              <span>Collapse</span>
+              <span>{t("common.collapse")}</span>
             </>
           )}
         </button>

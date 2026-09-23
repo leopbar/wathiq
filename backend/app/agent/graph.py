@@ -16,6 +16,9 @@ the same graph the pipeline compiles, and cannot drift from it.
 
 from __future__ import annotations
 
+from functools import wraps
+from typing import Any
+
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
@@ -33,6 +36,7 @@ from app.agent.nodes import (
     validate_node,
 )
 from app.agent.state import CaseState
+from app.azure import monitor
 
 # The steps, in order, with the label the UI shows. One source of truth for the graph, the
 # stepper and the "what happens next" panel, so none of them can describe a pipeline we do
@@ -50,19 +54,41 @@ STEP_LABELS: list[tuple[str, str]] = [
 ]
 
 
+def _traced(name: str, node: Any) -> Any:
+    """Wrap a node so every entry and exit is one span (M6).
+
+    Done here, once, rather than with a decorator on each of the nine node functions: a node
+    added later is traced because it was added to the graph, which is the property worth
+    having. With tracing off, `monitor.span` is a no-op context manager.
+
+    The case id is an attribute; nothing from the document is. A trace leaves the building.
+    """
+
+    @wraps(node)
+    async def traced_node(state: Any, *args: Any, **kwargs: Any) -> Any:
+        case_id = state.get("case_id") if isinstance(state, dict) else None
+        with monitor.span(f"graph.{name}", node=name, case_id=case_id):
+            return await node(state, *args, **kwargs)
+
+    return traced_node
+
+
 def build_graph() -> StateGraph:
     """Build the graph without compiling it, so tests can compile with their own checkpointer."""
     graph: StateGraph = StateGraph(CaseState)
 
-    graph.add_node("ocr", ocr_node)
-    graph.add_node("guardrails", guardrails_node)
-    graph.add_node("supervisor", supervisor_node)
-    graph.add_node("extract_worker", extract_worker_node)
-    graph.add_node("critic", critic_node)
-    graph.add_node("investigator", investigator_node)
-    graph.add_node("validate", validate_node)
-    graph.add_node("review_gate", review_gate_node)
-    graph.add_node("finalize", finalize_node)
+    for name, node in (
+        ("ocr", ocr_node),
+        ("guardrails", guardrails_node),
+        ("supervisor", supervisor_node),
+        ("extract_worker", extract_worker_node),
+        ("critic", critic_node),
+        ("investigator", investigator_node),
+        ("validate", validate_node),
+        ("review_gate", review_gate_node),
+        ("finalize", finalize_node),
+    ):
+        graph.add_node(name, _traced(name, node))
 
     graph.add_edge(START, "ocr")
     graph.add_edge("ocr", "guardrails")

@@ -1,6 +1,6 @@
 import { ArrowUpRight, Check, Keyboard, PencilLine, X } from "lucide-react";
 import type { ReasonCode, ReviewDecision } from "@/lib/types";
-import { DECISION_LABEL } from "@/lib/constants";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -12,6 +12,8 @@ const DECISION_ICON = {
   reject: X,
   escalate: ArrowUpRight,
 } as const;
+
+const DECISIONS: ReviewDecision[] = ["approve", "correct", "reject", "escalate"];
 
 const DECISION_KEY: Record<ReviewDecision, string> = {
   approve: "A",
@@ -47,6 +49,7 @@ export function DecisionBar({
   correctionCount: number;
   onOpenHelp: () => void;
 }) {
+  const { t } = useTranslation();
   const applicable = decision
     ? reasonCodes.filter((code) => code.applies_to.includes(decision))
     : [];
@@ -55,8 +58,8 @@ export function DecisionBar({
   return (
     <div className="sticky bottom-0 z-10 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Decision">
-          {(Object.keys(DECISION_LABEL) as ReviewDecision[]).map((value) => {
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("reviewTask.decision.group")}>
+          {DECISIONS.map((value) => {
             const Icon = DECISION_ICON[value];
             const selected = decision === value;
             return (
@@ -75,7 +78,7 @@ export function DecisionBar({
                 onClick={() => onDecisionChange(value)}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden />
-                {DECISION_LABEL[value]}
+                {t(`catalog.decision.${value}`)}
                 <kbd className="ms-1 rounded border border-current/30 px-1 text-caption opacity-70">
                   {DECISION_KEY[value]}
                 </kbd>
@@ -88,23 +91,28 @@ export function DecisionBar({
           value={reasonCode || undefined}
           onValueChange={onReasonCodeChange}
           disabled={disabled || !decision || applicable.length === 0}
-          ariaLabel="Reason code"
-          placeholder={decision ? "Reason code…" : "Pick a decision first"}
+          ariaLabel={t("reviewTask.decision.reasonCode")}
+          placeholder={
+            decision ? t("reviewTask.decision.reasonPlaceholder") : t("reviewTask.decision.pickFirst")
+          }
           className="w-full sm:w-64"
-          options={applicable.map((code) => ({ value: code.code, label: code.label }))}
+          options={applicable.map((code) => ({
+            value: code.code,
+            label: t(`reviewTask.reasonCodes.${code.code}`, { defaultValue: code.label }),
+          }))}
         />
 
         <Input
           value={note}
           disabled={disabled}
           onChange={(e) => onNoteChange(e.target.value)}
-          aria-label="Decision note"
-          placeholder="Note for the audit trail (optional)"
+          aria-label={t("reviewTask.decision.note")}
+          placeholder={t("reviewTask.decision.notePlaceholder")}
           className="w-full flex-1 sm:w-auto sm:min-w-48"
         />
 
-        <Tooltip content="Keyboard shortcuts (?)">
-          <Button variant="ghost" size="icon" onClick={onOpenHelp} aria-label="Keyboard shortcuts">
+        <Tooltip content={t("reviewTask.decision.shortcutsHint")}>
+          <Button variant="ghost" size="icon" onClick={onOpenHelp} aria-label={t("reviewTask.shortcuts.title")}>
             <Keyboard className="h-4 w-4" aria-hidden />
           </Button>
         </Tooltip>
@@ -115,16 +123,22 @@ export function DecisionBar({
           disabled={disabled || !decision || (reasonRequired && !reasonCode)}
           onClick={onSubmit}
         >
-          Submit decision
+          {t("reviewTask.decision.submit")}
         </Button>
       </div>
 
       <p className="mt-1.5 text-caption text-ink-2" aria-live="polite">
         {decision
-          ? `${DECISION_LABEL[decision]} selected${
-              correctionCount > 0 ? ` · ${correctionCount} field correction(s) will be saved` : ""
-            }${reasonRequired && !reasonCode ? " · a reason code is required" : ""}`
-          : "Choose Approve, Correct, Reject or Escalate. Corrections are saved with the decision."}
+          ? [
+              t("reviewTask.decision.selected", { decision: t(`catalog.decision.${decision}`) }),
+              correctionCount > 0
+                ? t("reviewTask.decision.corrections", { count: correctionCount })
+                : null,
+              reasonRequired && !reasonCode ? t("reviewTask.decision.reasonRequired") : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : t("reviewTask.decision.chooseHint")}
       </p>
     </div>
   );

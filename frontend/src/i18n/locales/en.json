@@ -16,7 +16,8 @@
     "prompts": "Prompt Studio",
     "settings": "Settings",
     "audit": "Audit log",
-    "about": "About the system"
+    "about": "About the system",
+    "gallery": "Failure gallery"
   },
   "common": {
     "search": "Search",
@@ -43,7 +44,97 @@
     "export": "Export CSV",
     "filters": "Filters",
     "clear": "Clear",
-    "apply": "Apply"
+    "apply": "Apply",
+    "refresh": "Refresh",
+    "collapse": "Collapse",
+    "mainNavigation": "Main navigation",
+    "accountMenu": "Account menu",
+    "mainNavigationMenu": "Main navigation menu",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "requestFailed": "Request failed",
+    "backToDashboard": "Back to dashboard",
+    "notAvailable": "n/a",
+    "detail": "Detail",
+    "source": "Source",
+    "closeDialog": "Close dialog",
+    "closePanel": "Close panel",
+    "clearSearch": "Clear search",
+    "searchEllipsis": "Search…",
+    "selectEllipsis": "Select…",
+    "sections": "Sections",
+    "unexpectedError": "Unexpected error.",
+    "nothingToShow": "Nothing to show",
+    "noRecords": "No records match this view.",
+    "themeLight": "Switch to light theme",
+    "themeDark": "Switch to dark theme",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "roles": {
+    "ops_officer": "Operations Officer",
+    "reviewer": "Reviewer",
+    "supervisor": "Supervisor",
+    "admin": "Administrator",
+    "auditor": "Auditor"
+  },
+  "roleDescriptions": {
+    "ops_officer": "Creates cases, uploads documents and tracks their progress.",
+    "reviewer": "Works the review queue: approve, correct or reject doubtful fields.",
+    "supervisor": "Handles escalations and SLA breaches, and sees the team dashboards.",
+    "admin": "Manages document types, prompts, rules, users and integrations.",
+    "auditor": "Read-only access to every case and the full audit trail."
+  },
+  "catalog": {
+    "caseStatus": {
+      "intake": "Intake",
+      "processing": "Processing",
+      "needs_review": "Needs review",
+      "in_review": "In review",
+      "approved": "Approved",
+      "posting": "Posting",
+      "completed": "Completed",
+      "rejected": "Rejected",
+      "failed": "Failed"
+    },
+    "caseType": {
+      "kyc_refresh": "Corporate KYC refresh",
+      "salary_certificate": "Salary certificate"
+    },
+    "sla": {
+      "on_track": "On track",
+      "at_risk": "At risk",
+      "breached": "Breached",
+      "none": "No SLA"
+    },
+    "priority": {
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "risk": {
+      "low": "Low risk",
+      "medium": "Medium risk",
+      "high": "High risk"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "docType": {
+      "trade_license": "Trade licence",
+      "emirates_id": "Emirates ID",
+      "passport": "Passport",
+      "moa": "Memorandum of association",
+      "salary_certificate": "Salary certificate",
+      "unknown": "Unclassified"
+    },
+    "decision": {
+      "approve": "Approve",
+      "correct": "Correct",
+      "reject": "Reject",
+      "escalate": "Escalate"
+    }
   },
   "states": {
     "errorTitle": "Something went wrong",
@@ -51,6 +142,16 @@
     "emptyTitle": "Nothing here yet",
     "forbiddenTitle": "Not allowed for your role",
     "notFoundTitle": "Page not found"
+  },
+  "pagination": {
+    "label": "Pagination",
+    "range": "{{first}}–{{last}} of {{total}} {{label}}",
+    "page": "Page {{page}} of {{pages}}"
+  },
+  "sla": {
+    "over": "{{time}} over",
+    "left": "{{time}} left",
+    "due": "{{state}} · due {{date}}"
   },
   "login": {
     "title": "Sign in",
@@ -62,6 +163,1047 @@
     "demoSubtitle": "One click per role — synthetic accounts, synthetic data.",
     "trust1": "Every extracted value carries its confidence and its source region.",
     "trust2": "Humans review only what the system is genuinely unsure about.",
-    "trust3": "Every action is written to an append-only audit trail."
+    "trust3": "Every action is written to an append-only audit trail.",
+    "signInAs": "Sign in as {{role}}",
+    "signingIn": "Signing in…",
+    "demoFailed": "Demo sign-in failed"
+  },
+  "dashboard": {
+    "greeting": "Good to see you, {{name}}",
+    "there": "there",
+    "description": "Operational health of the document pipeline — volumes, confidence, handling time and the findings that drive review.",
+    "kpiRegion": "Key performance indicators",
+    "kpiError": "KPIs could not be loaded",
+    "caseVolume": "Case volume",
+    "caseVolumeDescription": "Straight-through versus human-reviewed, by day.",
+    "statusSplit": "Status split",
+    "statusSplitDescription": "Where every case currently sits.",
+    "fieldConfidence": "Field confidence",
+    "fieldConfidenceDescription": "Calibrated confidence across extracted fields.",
+    "handlingTime": "Handling time",
+    "handlingTimeDescription": "p50 and p90 end-to-end, by day.",
+    "topFindings": "Top findings",
+    "topFindingsDescription": "What sends cases to a human most often.",
+    "noVolume": "No volume yet",
+    "noVolumeDescription": "Cases will appear here once processed.",
+    "noCases": "No cases yet",
+    "noExtractions": "No extractions yet",
+    "noTimings": "No timings yet",
+    "noFindings": "No findings recorded",
+    "casesUnit": "cases",
+    "straightThrough": "Straight-through",
+    "humanReviewed": "Human reviewed",
+    "fields": "Fields",
+    "kpis": {
+      "casesToday": "Cases today",
+      "total": "{{count}} total",
+      "straightThrough": "Straight-through",
+      "noHuman": "no human touched it",
+      "reviewRate": "Review rate",
+      "sentToHuman": "sent to a human",
+      "avgHandling": "Avg handling time",
+      "slaBreaches": "SLA breaches",
+      "avgCost": "Avg cost / case",
+      "modelOcr": "model + OCR",
+      "openReviews": "Open reviews"
+    }
+  },
+  "cases": {
+    "title": "Cases",
+    "description": "Every document package in the pipeline, with its status, confidence and SLA.",
+    "searchPlaceholder": "Search reference or customer…",
+    "searchLabel": "Search cases",
+    "caseTypeFilter": "Filter by case type",
+    "allCaseTypes": "All case types",
+    "slaFilter": "Filter by SLA state",
+    "anySla": "Any SLA state",
+    "assignedToMe": "Assigned to me",
+    "statusFilter": "Filter by status",
+    "openFindings": "{{count}} open",
+    "noMatches": "No cases match these filters",
+    "noMatchesDescription": "Try widening the search or clearing a status chip.",
+    "noCases": "No cases yet",
+    "noCasesDescription": "Create the first case to see the pipeline in action.",
+    "clearFilters": "Clear filters",
+    "createCase": "Create a case",
+    "columns": {
+      "reference": "Reference",
+      "customer": "Customer",
+      "type": "Type",
+      "status": "Status",
+      "confidence": "Confidence",
+      "documents": "Docs",
+      "findings": "Findings",
+      "sla": "SLA",
+      "updated": "Updated"
+    }
+  },
+  "newCase": {
+    "title": "New case",
+    "description": "Create a customer case, attach the document package, and watch the agent pipeline run it end to end.",
+    "startAnother": "Start another case",
+    "caseDetails": "Case details",
+    "syntheticOnly": "Synthetic customers only — this environment never holds real records.",
+    "customerNameEn": "Customer name (English)",
+    "customerNameAr": "Customer name (Arabic)",
+    "customerNameArHint": "Optional — used for the bilingual cross-check.",
+    "caseType": "Case type",
+    "priority": "Priority",
+    "notes": "Notes for the reviewer",
+    "notesHint": "Anything a human should know before deciding.",
+    "notesPlaceholder": "Renewal after a change of shareholders; trade licence was reissued last month.",
+    "documents": "Documents",
+    "createAndStart": "Create and start",
+    "whatNext": "What happens next",
+    "whatNextDescription": "The same {{count}} steps run for every case.",
+    "started": "Case started",
+    "startedDescription": "{{reference}} is now processing.",
+    "startError": "Could not start the case",
+    "errors": {
+      "customerName": "Customer name is required",
+      "notesLength": "Notes must be 2,000 characters or fewer",
+      "files": "Attach at least one document."
+    },
+    "stages": {
+      "creating": "Creating case…",
+      "uploading_one": "Uploading {{count}} document…",
+      "uploading_other": "Uploading {{count}} documents…",
+      "starting": "Starting the pipeline…"
+    },
+    "expected": "Expected for this case type: {{documents}}",
+    "expectedUnknown": "Upload the documents this case needs."
+  },
+  "pipeline": {
+    "intake": {
+      "label": "Intake",
+      "description": "Documents received and stored"
+    },
+    "ocr": {
+      "label": "Read text",
+      "description": "Text pulled out of each document"
+    },
+    "guardrails": {
+      "label": "Guardrails",
+      "description": "Prompt shield, content safety, PII tokenised for logs"
+    },
+    "supervisor": {
+      "label": "Classify and plan",
+      "description": "Decide what each document is, then dispatch a worker for each"
+    },
+    "extract": {
+      "label": "Extract (parallel)",
+      "description": "One worker per document, self-correcting on validation errors"
+    },
+    "critic": {
+      "label": "Critic",
+      "description": "A second, independent read challenges every value"
+    },
+    "investigate": {
+      "label": "Investigate",
+      "description": "Screening and registry checks, in a bounded ReAct loop"
+    },
+    "validate": {
+      "label": "Validate",
+      "description": "Versioned rules, policy citations, calibrated confidence"
+    },
+    "review_gate": {
+      "label": "Review gate",
+      "description": "Human-in-the-loop interrupt"
+    },
+    "finalize": {
+      "label": "Finalize",
+      "description": "Close the case and audit"
+    }
+  },
+  "dropzone": {
+    "title": "Drag documents here",
+    "description": "Trade licence, Emirates ID, passport, memorandum of association or salary certificate. PDF, PNG, JPEG or TIFF up to {{size}} each.",
+    "choose": "Choose files",
+    "chooseLabel": "Choose documents to upload",
+    "tooMany": "Only {{count}} documents can be uploaded at once.",
+    "invalidType": "{{name}}: only PDF, PNG, JPEG and TIFF are accepted.",
+    "tooLarge": "{{name}}: larger than {{size}}.",
+    "duplicate": "{{name}}: already added.",
+    "remove": "Remove {{name}}"
+  },
+  "pipelineProgress": {
+    "title": "Pipeline",
+    "description": "Live progress for {{reference}}.",
+    "viewCase": "View case",
+    "progress": "Pipeline progress",
+    "waitingToStart": "Waiting for the pipeline to start.",
+    "streamDropped": "The live stream dropped. The case keeps processing on the server — open it to see the final state.",
+    "parked": "The pipeline paused at the review gate and is waiting for a reviewer. Its checkpoint resumes from this exact point after a decision.",
+    "noFrames": "The stream closed without progress frames. Open the case to see its current state.",
+    "thread": "Conductor workflow / LangGraph thread",
+    "copyThread": "Copy thread id",
+    "rawStream_one": "Raw stream ({{count}} frame)",
+    "rawStream_other": "Raw stream ({{count}} frames)"
+  },
+  "about": {
+    "loadError": "System information could not be loaded",
+    "liveGraph": "Live agent graph",
+    "graphError": "The graph could not be fetched",
+    "graphAria": "LangGraph agent graph",
+    "graphNote": "Rendered from the graph's own <code>draw_mermaid()</code> output, so this picture cannot drift from the code that runs.",
+    "description": "What Wathiq does, how the parts fit together, and why each piece was chosen over its alternative.",
+    "pitch": {
+      "twoLayers": {
+        "title": "Two layers, one identifier",
+        "body": "Orkes Conductor runs the business process; LangGraph runs the AI reasoning inside one agent task. The Conductor workflow id is the LangGraph thread id, so a single identifier ties the process, the agent run and the audit trail together."
+      },
+      "assurance": {
+        "title": "Assurance before automation",
+        "body": "Every extracted value carries a calibrated confidence and a source region. Cases pass straight through only when the evidence supports it; everything else interrupts for a human at a mandatory or dynamic review point."
+      },
+      "configuration": {
+        "title": "Configuration, not code",
+        "body": "A new document type is a schema, a prompt version, cross-field rules and a golden set. Demo and Azure modes run the same code paths behind a provider interface."
+      }
+    },
+    "architecture": "Architecture",
+    "architectureDescription": "The same diagrams the backend ships, rendered live from Mermaid source.",
+    "noDiagrams": "No diagrams published",
+    "stackHeading": "Stack and reasoning",
+    "noStack": "No stack recorded",
+    "serviceStatus": "Service status",
+    "serviceStatusDescription": "Live health of each dependency in this deployment.",
+    "runMode": "Run mode",
+    "demoBody": "Demo mode: a deterministic fake model, demo OCR, a simulated core banking system and synthetic data. The demo runs fully offline, so it cannot fail because of a network or a quota.",
+    "azureBody": "Azure mode: Azure AI Foundry, Document Intelligence, Content Safety and AI Search are live. Only the providers behind the interfaces change — the application code is identical.",
+    "build": "Build",
+    "started": "Started",
+    "lastRestart": "Last restart",
+    "serviceState": {
+      "healthy": "healthy",
+      "degraded": "degraded",
+      "down": "down",
+      "disabled": "disabled"
+    },
+    "stack": {
+      "description": "What we used, and what we deliberately did not use.",
+      "choices_one": "{{count}} choices",
+      "choices_other": "{{count}} choices",
+      "caption": "{{layer}} stack choices",
+      "component": "Component",
+      "version": "Version",
+      "why": "Why we chose it",
+      "alternative": "Alternative considered"
+    }
+  },
+  "roleSummary": {
+    "openQueue": "Open queue",
+    "queueClear": "Queue is clear",
+    "queueClearDescription": "No pending review tasks are waiting for you right now.",
+    "browseCases": "Browse cases",
+    "taskCounts_one": "{{fields}} fields · {{count}} open finding",
+    "taskCounts_other": "{{fields}} fields · {{count}} open findings",
+    "yourQueue": "Your review queue",
+    "yourQueueDescription": "Tasks assigned to you, most urgent first.",
+    "teamQueue": "Team review queue",
+    "teamQueueDescription": "Everything waiting across the team, with live SLA timers.",
+    "auditorTitle": "Read-only auditor view",
+    "auditorBody": "You can open every case, field, finding and audit entry, including the prompt and model version behind each decision. Nothing on this account can change a case, and the API enforces that independently of this interface.",
+    "openAudit": "Open audit log",
+    "qualityEvidence": "Quality evidence"
+  },
+  "caseDetail": {
+    "loadError": "This case could not be loaded",
+    "allCases": "All cases",
+    "openReviewTask": "Open review task",
+    "meta": {
+      "confidence": "Confidence",
+      "risk": "Risk",
+      "priority": "Priority",
+      "sla": "SLA",
+      "processing": "Processing",
+      "cost": "Cost",
+      "created": "Created",
+      "updated": "Updated",
+      "createdBy": "Created by",
+      "assignedTo": "Assigned to",
+      "unassigned": "Unassigned",
+      "documents": "Documents",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "findings": "Findings",
+      "openOfTotal": "{{open}} open / {{total}}"
+    },
+    "threadNote": "One identifier links the process layer, the agent graph and the audit trail.",
+    "tabs": {
+      "fields": "Fields",
+      "findings": "Findings",
+      "process": "Process",
+      "assurance": "Assurance",
+      "timeline": "Timeline"
+    },
+    "finished": "finished",
+    "loadingEllipsis": "Loading…",
+    "processUnavailable": "The process view is unavailable",
+    "readingProcess": "Reading this case's process record.",
+    "processUnavailableDescription": "The process layer could not be asked about this case.",
+    "seeded": "seeded",
+    "tools_one": "{{count}} tools",
+    "tools_other": "{{count}} tools",
+    "noEvidence": "No evidence available",
+    "readingCheckpoint": "Reading the agent's checkpoint.",
+    "noEvidenceDescription": "The agent checkpoint for this case could not be read.",
+    "noEvents": "No events yet",
+    "noEventsDescription": "The agent timeline fills in as the pipeline runs.",
+    "documents": {
+      "empty": "No documents",
+      "emptyDescription": "This case has no files attached.",
+      "status": {
+        "uploaded": "uploaded",
+        "ocr": "ocr",
+        "classified": "classified",
+        "extracted": "extracted",
+        "failed": "failed"
+      }
+    },
+    "findings": {
+      "empty": "No findings",
+      "emptyDescription": "Every rule passed on this case — nothing needed a human decision.",
+      "status": {
+        "open": "open",
+        "resolved": "resolved",
+        "waived": "waived"
+      }
+    },
+    "signals": {
+      "weight": "weight {{weight}}"
+    },
+    "fields": {
+      "empty": "No fields extracted yet",
+      "emptyDescription": "Fields appear once the extract node has run for this case.",
+      "crossDocument": "Cross-document",
+      "criticalHint": "Critical field — a wrong value here blocks the case.",
+      "notFound": "not found",
+      "status": {
+        "auto_accepted": "Auto-accepted",
+        "needs_review": "Needs review",
+        "corrected": "Corrected",
+        "rejected": "Rejected"
+      },
+      "page": "page {{page}}",
+      "noSourceRegion": "no source region",
+      "whyConfidence": "Why this confidence"
+    },
+    "process": {
+      "writesCoreBanking": "writes to core banking",
+      "stepStatus": {
+        "completed": "done",
+        "running": "running",
+        "waiting": "waiting for a person",
+        "skipped": "not needed",
+        "failed": "failed",
+        "pending": "not yet"
+      },
+      "inProcessEngine": "In-process engine",
+      "postingTitle": "Core banking posting",
+      "postingStatus": {
+        "posted": "posted",
+        "skipped": "skipped",
+        "failed": "failed"
+      },
+      "simulated": "simulated",
+      "duplicate": "already posted — key recognised",
+      "reference": "Reference",
+      "customerFile": "Customer file",
+      "approvedBy": "Approved by",
+      "aPerson": "a person",
+      "aPolicy": "a policy, not a person",
+      "idempotencyKey": "Idempotency key",
+      "regionLabel": "Business process",
+      "humanAsked": "a human was asked",
+      "straightThrough": "straight through",
+      "slaEscalated": "SLA escalated",
+      "finished": "process finished",
+      "workflowId": "Workflow id — also the LangGraph thread id",
+      "notStarted": "This case has no recorded process start. Seeded demo cases are written straight to the database and never run through the workflow.",
+      "conductorSays": "What Conductor says",
+      "conductorSaysBody": "Read from the orchestrator itself, next to Wathiq's own record above. They are kept by two different systems and should agree.",
+      "retried_one": "retried {{count}}×",
+      "retried_other": "retried {{count}}×"
+    },
+    "viewer": {
+      "noDocument": "No document selected",
+      "noDocumentDescription": "Pick a document on the left to preview it here.",
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "resetZoom": "Reset zoom",
+      "openRaw": "Open the raw file in a new tab",
+      "openInTab": "Open document in a new tab",
+      "preview": "Preview of {{name}}",
+      "showingRegion": "Showing source region for",
+      "selectField": "Select a field to highlight where it came from.",
+      "ocr": "OCR {{value}}",
+      "classification": "Class {{value}}"
+    },
+    "assurance": {
+      "shieldAttacked_one": "Prompt shield: {{count}} suspicious pattern(s), risk {{risk}}",
+      "shieldAttacked_other": "Prompt shield: {{count}} suspicious pattern(s), risk {{risk}}",
+      "shieldClear": "Prompt shield: no instruction-shaped text found",
+      "safetyFlagged": "Content safety: flagged ({{matches}})",
+      "safetyClear": "Content safety: nothing flagged",
+      "piiNone": "PII tokenisation: no identifiers found",
+      "piiReplaced": "PII tokenisation: {{items}} replaced with tokens before logging",
+      "sanitised": "Sanitiser: removed markup or invisible characters",
+      "sanitiserClear": "Sanitiser: nothing to remove",
+      "fields_one": "{{count}} fields",
+      "fields_other": "{{count}} fields",
+      "attempts_one": "{{count}} attempt",
+      "attempts_other": "{{count}} attempts",
+      "noRepairs": "Every value validated on the first read — no self-correction was needed.",
+      "pass": "pass {{pass}}",
+      "leftEmpty": "left empty",
+      "fewShot": "Few-shot examples selected for the prompt:",
+      "fewShotNote": "(selection runs in demo mode; the demo extractor makes no model call)",
+      "inProcess": "in-process",
+      "noCheckpoint": "No agent checkpoint for this case",
+      "guardrails": "Guardrails",
+      "guardrailsSubtitle": "Prompt shield, content safety and PII tokenisation, before anything read the text",
+      "flagged_one": "{{count}} flagged",
+      "flagged_other": "{{count}} flagged",
+      "allClear": "all clear",
+      "workers": "Supervisor and workers",
+      "workersSubtitle": "One worker per document, dispatched in parallel, each self-correcting on its own validation errors",
+      "inParallel_one": "{{count}} in parallel",
+      "inParallel_other": "{{count}} in parallel",
+      "sure": "{{value}} sure",
+      "notDispatched": "not dispatched: {{reason}}",
+      "matchedOn": "matched on: {{evidence}}",
+      "critic": "Critic",
+      "criticSubtitle": "An independent second read of every value: is it on the page, is it the right shape, is it under the right label",
+      "disagreed_one": "{{count}} disagreed",
+      "disagreed_other": "{{count}} disagreed",
+      "agreedAll_one": "agreed on all {{count}}",
+      "agreedAll_other": "agreed on all {{count}}",
+      "criticEmpty": "The critic had no values to challenge.",
+      "investigation": "Investigation",
+      "investigationSubtitle": "A bounded ReAct loop: a question, a tool, an observation — for what the documents cannot answer",
+      "steps_one": "{{count}} steps",
+      "steps_other": "{{count}} steps",
+      "investigationEmpty": "Nothing needed asking of the outside world for this case.",
+      "thought": "Thought",
+      "action": "Action",
+      "observation": "Observation",
+      "toolCalls": "Tool calls",
+      "toolCallsSubtitle": "Every MCP call this case made, in order, with what came back",
+      "failedCalls_one": "{{count}} failed",
+      "failedCalls_other": "{{count}} failed",
+      "calls_one": "{{count}} calls",
+      "calls_other": "{{count}} calls",
+      "noTools": "No external tools were needed.",
+      "ok": "ok",
+      "failed": "failed",
+      "rules": "Rules and calibration",
+      "rulesSubtitle": "Which versioned rule pack judged this case, and whether its confidence went through a fitted curve",
+      "promptFor": "{{docType}} prompt",
+      "calibration": "Confidence calibration",
+      "calibrationFitted_one": "Fitted on {{count}} reviewed field(s). Brier score {{before}} → {{after}}.",
+      "calibrationFitted_other": "Fitted on {{count}} reviewed field(s). Brier score {{before}} → {{after}}.",
+      "calibrationNotFitted": "Not fitted yet, so the numbers on this case are the extractor’s raw scores. They are shown as raw rather than presented as calibrated."
+    }
+  },
+  "audit": {
+    "description": "An append-only record of every action: who or what did it, when, and which prompt and model version were pinned at the time.",
+    "searchPlaceholder": "Free text across labels and references…",
+    "searchLabel": "Search the audit log",
+    "actor": "Actor",
+    "action": "Action",
+    "from": "From",
+    "to": "To",
+    "noMatches": "No entries match these filters",
+    "empty": "The audit log is empty",
+    "noMatchesDescription": "Widen the date range or clear the actor and action filters.",
+    "emptyDescription": "Entries appear as soon as the pipeline or a reviewer acts on a case.",
+    "caption": "Audit entries",
+    "expand": "Expand",
+    "columns": {
+      "when": "When",
+      "actor": "Actor",
+      "action": "Action",
+      "case": "Case",
+      "prompt": "Prompt",
+      "model": "Model"
+    },
+    "hideDetail": "Hide detail",
+    "showDetail": "Show detail",
+    "actorType": {
+      "agent": "agent",
+      "user": "user",
+      "system": "system"
+    },
+    "entryId": "Entry id",
+    "ipAddress": "IP address",
+    "caseId": "Case id",
+    "entriesUnit": "entries"
+  },
+  "commandPalette": {
+    "description": "Jump to a screen or open a case by reference."
+  },
+  "prompts": {
+    "approved": "Version approved",
+    "retired": "Version retired",
+    "versionOf": "v{{version}} of {{key}}.",
+    "actionFailed": "Action failed",
+    "approve": "Approve",
+    "retire": "Retire",
+    "description": "Every prompt is versioned with semver: MAJOR changes the output schema, MINOR adds fields, PATCH rewords. The engine only ever loads a pinned, approved version.",
+    "approveForbidden": "Only administrators can approve or retire a prompt version.",
+    "listTitle": "Prompts",
+    "empty": "No prompts registered",
+    "status": {
+      "draft": "draft",
+      "approved": "approved",
+      "retired": "retired"
+    },
+    "versionsCount_one": "{{count}} versions",
+    "versionsCount_other": "{{count}} versions",
+    "selectTitle": "Select a prompt",
+    "selectDescription": "Pick a prompt to see its versions.",
+    "noVersions": "No versions yet",
+    "history": "Version history",
+    "approvedBy": "approved by {{name}}",
+    "tabs": {
+      "evaluations": "Evaluations",
+      "body": "Prompt body",
+      "diff": "Diff"
+    },
+    "compareFrom": "Compare from",
+    "diffBase": "Diff base version",
+    "to": "to",
+    "pickBase": "Pick a base version",
+    "pickBaseDescription": "Choose an earlier version to see what changed.",
+    "noDiff": "No differences",
+    "noDiffDescription": "These two versions have identical prompt bodies.",
+    "evaluations": {
+      "intro": "Runs template checks and golden-set correctness against the demo backend, linked to this exact prompt version.",
+      "sensitivity": "Wording sensitivity is not measured: the demo reader does not consume prompt instructions. No model robustness score is claimed.",
+      "evaluate": "Evaluate this version",
+      "empty": "No measured evaluations for this version yet.",
+      "summary": "{{passed}} passed · {{failed}} failed · {{checks}} checks · {{date}}"
+    }
+  },
+  "quality": {
+    "downloadFailed": "Dataset download failed",
+    "refitted": "Confidence curve refitted",
+    "refittedDescription_one": "Fitted on {{count}} reviewed field(s). Brier {{before}} → {{after}}.",
+    "refittedDescription_other": "Fitted on {{count}} reviewed field(s). Brier {{before}} → {{after}}.",
+    "fitRejected": "Fit was not accepted",
+    "fitRejectedDescription_one": "{{count}} reviewed field(s). The fit requires enough examples of both outcomes and must improve the training Brier score. Confidence stays raw.",
+    "fitRejectedDescription_other": "{{count}} reviewed field(s). The fit requires enough examples of both outcomes and must improve the training Brier score. Confidence stays raw.",
+    "fitNoData": "No reviewed fields yet. Confidence stays raw until reviewers have decided some cases.",
+    "refitFailed": "Refit failed",
+    "finished": "Evaluation finished",
+    "finishedDescription": "{{bands}} band(s), {{checks}} checks, {{failed}} failed.",
+    "startError": "Evaluation could not start",
+    "columns": {
+      "band": "Band",
+      "score": "Score",
+      "result": "Passed / failed",
+      "duration": "Duration",
+      "triggeredBy": "Triggered by",
+      "commit": "Commit",
+      "started": "Started"
+    },
+    "illustrative": "illustrative",
+    "running": "running",
+    "run": "Run evaluation",
+    "runBand": "Run evaluation: {{band}}",
+    "description": "Five evaluation bands, a regression history, and the calibration curve behind every confidence number in the product.",
+    "overall": "Overall {{score}}",
+    "runForbidden": "Supervisors and administrators can start evaluation runs.",
+    "datasetLine1": "50 synthetic documents · 5 quality conditions · English and bilingual Arabic labels.",
+    "datasetLine2": "Blurry scans test abstention. Scores are diagnostic checks, not production accuracy.",
+    "savedCorrections_one": "{{count}} saved reviewer corrections.",
+    "savedCorrections_other": "{{count}} saved reviewer corrections.",
+    "exportCorrections": "Export corrections",
+    "downloadGolden": "Download golden set",
+    "noBands": "No evaluation bands configured",
+    "noBandsDescription": "Bands are seeded with the golden dataset in M5.",
+    "history": "Regression history",
+    "allBands": "All bands",
+    "filteredTo": "Filtered to “{{band}}”",
+    "newestFirst": "newest first.",
+    "clearFilter": "Clear filter",
+    "runsCaption": "Evaluation runs",
+    "noRuns": "No runs recorded",
+    "noRunsDescription": "Start an evaluation to build the regression history.",
+    "calibrationDescription": "Predicted confidence versus observed accuracy.",
+    "noCalibration": "No calibration data",
+    "noCalibrationDescription": "The calibration model is fitted on reviewer outcomes.",
+    "reviewedFields_one": "{{count}} reviewed fields.",
+    "reviewedFields_other": "{{count}} reviewed fields.",
+    "openMlflow": "Open local MLflow experiment",
+    "calibrationExplain": "Points on the dashed line mean a stated 80% is right 80% of the time. Points below the line mean the system is overconfident — that is what the calibration step corrects before any confidence reaches a reviewer.",
+    "curveFitted": "Curve fitted",
+    "curveNotFitted": "Curve not fitted yet",
+    "curveFittedDetail_one": "on {{count}} reviewed field(s). Brier {{before}} → {{after}}.",
+    "curveFittedDetail_other": "on {{count}} reviewed field(s). Brier {{before}} → {{after}}.",
+    "curveRaw": "— the confidence shown across the product is the extractor’s raw score, labelled as raw rather than presented as calibrated.",
+    "soFar_one": "{{count}} reviewed field(s) so far.",
+    "soFar_other": "{{count}} reviewed field(s) so far.",
+    "noDecisions": "No reviewer decisions to learn from yet.",
+    "refitting": "Refitting…",
+    "refit": "Refit curve",
+    "refitNote": "Fits again on every decision reviewers have made since.",
+    "groundTruth": "Where the ground truth comes from:",
+    "bandFailed_one": "{{count}} failed",
+    "bandFailed_other": "{{count}} failed",
+    "allPassed": "All passed",
+    "evaluationBand": "Evaluation band",
+    "bandScore": "{{band}} score",
+    "bandCases": "{{passed}}/{{total}} cases",
+    "band": {
+      "model": {
+        "label": "Model",
+        "blurb": "Does deterministic extraction preserve the answer contract?"
+      },
+      "prompt": {
+        "label": "Prompt",
+        "blurb": "Are prompts correct and stable under paraphrase?"
+      },
+      "agent": {
+        "label": "Agent",
+        "blurb": "Does the graph route, interrupt and stop as designed?"
+      },
+      "ai_security": {
+        "label": "AI security",
+        "blurb": "Injection, exfiltration and unsafe-output defences."
+      },
+      "security": {
+        "blurb": "Injection, exfiltration and unsafe-output defences."
+      },
+      "adversarial": {
+        "label": "Adversarial",
+        "blurb": "Hidden instructions, altered values, poor scans, AR/EN edge cases."
+      }
+    },
+    "drawer": {
+      "title": "Evaluation run",
+      "description": "Every case in the run, with what was expected and what the system produced.",
+      "measured_one": "{{dataset}} · {{count}} checks. {{scope}}",
+      "measured_other": "{{dataset}} · {{count}} checks. {{scope}}",
+      "illustrative": "Illustrative seeded history. These scores were not measured.",
+      "sensitivity": "Prompt sensitivity: {{reason}}",
+      "result": "Result",
+      "passedFailed": "{{passed}} passed · {{failed}} failed",
+      "noCases": "No cases in this run",
+      "passed": "passed",
+      "failed": "failed",
+      "expected": "Expected",
+      "actual": "Actual"
+    }
+  },
+  "review": {
+    "claimed": "Task claimed",
+    "claimedDescription": "{{reference}} is yours.",
+    "claimError": "Could not claim the task",
+    "columns": {
+      "case": "Case",
+      "reason": "Reason",
+      "scope": "Scope",
+      "assignee": "Assignee",
+      "sla": "SLA",
+      "waiting": "Waiting",
+      "action": "Action"
+    },
+    "escalated": "escalated",
+    "scope": "{{fields}} fields · {{findings}} findings",
+    "you": "You",
+    "unclaimed": "Unclaimed",
+    "done": "done",
+    "decisionValue": {
+      "approve": "approve",
+      "correct": "correct",
+      "reject": "reject",
+      "escalate": "escalate"
+    },
+    "claimedBadge": "Claimed",
+    "continue": "Continue",
+    "claim": "Claim",
+    "description": "Only the cases the system is genuinely unsure about reach this list. Claim a task to work it end to end.",
+    "onlyMine": "Only mine",
+    "statusFilter": "Filter by task status",
+    "status": {
+      "all": "Any status",
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "completed": "Completed"
+    },
+    "emptyTitle": "Nothing waiting",
+    "emptyMine": "You have no tasks assigned. Switch off “Only mine” to see the whole queue.",
+    "emptyAll": "The queue is empty — everything the pipeline produced was confident enough to pass straight through.",
+    "showAll": "Show the whole queue",
+    "tasksUnit": "tasks"
+  },
+  "reviewTask": {
+    "recorded": "Decision recorded",
+    "recordedDescription": "The graph resumes from its checkpoint with your decision.",
+    "notSaved": "Decision was not saved",
+    "loadError": "This review task could not be loaded",
+    "fullCase": "Full case",
+    "completed": "This task is already completed",
+    "decisionWas": "decision: {{decision}}",
+    "fieldsAndFindings": "Fields and findings",
+    "fieldsAndFindingsDescription": "Correct a value in place; corrections are submitted with your decision.",
+    "corrections": {
+      "empty": "No fields to review",
+      "emptyDescription": "This task has no extracted fields attached.",
+      "showRegion": "Show source region for {{label}}",
+      "critical": "Critical field",
+      "valueFor": "Value for {{label}}",
+      "undo": "Undo correction to {{label}}",
+      "was": "Was",
+      "emptyValue": "empty"
+    },
+    "decision": {
+      "group": "Decision",
+      "reasonCode": "Reason code",
+      "reasonPlaceholder": "Reason code…",
+      "pickFirst": "Pick a decision first",
+      "note": "Decision note",
+      "notePlaceholder": "Note for the audit trail (optional)",
+      "shortcutsHint": "Keyboard shortcuts (?)",
+      "submit": "Submit decision",
+      "selected": "{{decision}} selected",
+      "corrections_one": "{{count}} field correction(s) will be saved",
+      "corrections_other": "{{count}} field correction(s) will be saved",
+      "reasonRequired": "a reason code is required",
+      "chooseHint": "Choose Approve, Correct, Reject or Escalate. Corrections are saved with the decision."
+    },
+    "reasonCodes": {
+      "VALUES_CONFIRMED": "Values confirmed against the document",
+      "FINDING_WAIVED": "Finding reviewed and waived",
+      "OCR_ERROR": "OCR misread the value",
+      "WRONG_FIELD_MAPPED": "Value taken from the wrong place",
+      "TRANSLITERATION": "Arabic/English transliteration corrected",
+      "ILLEGIBLE_DOCUMENT": "Document is illegible — new copy needed",
+      "EXPIRED_DOCUMENT": "Document is expired",
+      "WRONG_DOCUMENT": "Wrong document supplied",
+      "POSSIBLE_SANCTIONS_HIT": "Possible sanctions match — needs compliance",
+      "SUSPECTED_TAMPERING": "Document may be altered",
+      "POLICY_EXCEPTION": "Needs a policy exception"
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "description": "The review workspace is fully keyboard operable.",
+      "actions": {
+        "approve": "Approve the case as extracted",
+        "correct": "Record corrections and approve",
+        "reject": "Reject the case",
+        "escalate": "Escalate to a supervisor",
+        "move": "Move to the next / previous field",
+        "edit": "Edit the focused field",
+        "help": "Open this help",
+        "close": "Close dialogs"
+      }
+    }
+  },
+  "notFound": {
+    "description": "That route does not exist in Wathiq. It may have been renamed, or the link is out of date."
+  },
+  "forbidden": {
+    "thisScreen": "This screen",
+    "description": "{{screen}} is restricted. Access is enforced by the API as well as the interface, so nothing is hidden only on the client.",
+    "signedInAs": "Signed in as {{role}}",
+    "capability": {
+      "case_create": "Create a case",
+      "review": "Review workspace",
+      "quality": "Quality Lab",
+      "prompts": "Prompt Studio",
+      "settings": "Settings",
+      "settings_users": "User administration",
+      "audit": "Audit log"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Document types, users, the process layer, integrations and the run mode of this deployment.",
+    "readOnly": "Read-only for your role",
+    "tabs": {
+      "documentTypes": "Document types",
+      "users": "Users",
+      "assurance": "Assurance",
+      "process": "Process",
+      "integrations": "Integrations",
+      "azure": "Azure",
+      "mode": "Mode"
+    },
+    "assurance": {
+      "canWrite": "can write",
+      "canWriteHint": "This server can change a system of record. Only the posting step may call it, and only after a human approved.",
+      "readOnly": "read only",
+      "readOnlyHint": "Read-only: this server exposes no tool that changes anything.",
+      "tools": "Tools",
+      "allowedNodes": "Graph nodes allowed to call it",
+      "addressConfigured": "Address configured",
+      "yes": "yes",
+      "notConfigured": "not configured",
+      "rules_one": "{{count}} rules",
+      "rules_other": "{{count}} rules",
+      "severity": {
+        "info": "info",
+        "warning": "warning",
+        "critical": "critical"
+      },
+      "namedCheck": "named check",
+      "namedCheckHint": "A named check written in Python. A rule pack refers to it by name; adding a new kind of check is code, adding a rule is configuration.",
+      "intro": "Everything on this page is read from the code that runs: the guardrails that are installed, the weights the confidence is built from, the tools each part of the agent is allowed to call, and the rule files on disk. It cannot describe a system we are not running.",
+      "guardrailsHeading": "Guardrails · run on every document before anything reads it",
+      "now": "Now",
+      "inAzureMode": "In Azure mode",
+      "confidenceHeading": "Confidence · every field’s score is built from these five signals",
+      "calibrationLead": "The weighted total is the raw score. It is then mapped through the calibration curve:",
+      "calibrationFitted_one": "fitted on {{count}} reviewed field(s).",
+      "calibrationFitted_other": "fitted on {{count}} reviewed field(s).",
+      "calibrationNotFitted": "not fitted yet, so raw scores are shown as raw.",
+      "calibrationTail": "A signal that has not been measured yet is left out and the rest are re-weighted, so a field is never punished for a check that has not run.",
+      "toolServersHeading": "MCP tool servers · least privilege, one process each",
+      "toolServersNote": "The investigator is given the registry, the screening list and the read-only document store. It has no address for core banking, and the broker in the API refuses the call even if it had one. That is two independent locks on the only server that can write.",
+      "rulePacksHeading": "Rule packs · versioned YAML, one file per document type",
+      "namedChecksNote": "Named checks registered in code: {{checks}}. A rule pack may refer to one by name; everything else is an expression, which is why adding a document type is a configuration change.",
+      "policyHeading": "Policy pack · what findings cite, indexed for retrieval",
+      "sections_one": "{{count}} sections",
+      "sections_other": "{{count}} sections",
+      "policyNote": "Synthetic policies written for this demonstration — not real bank policy. Indexed with: {{embedder}}. A rule that names its section quotes that section directly; a finding with no citation gets the nearest section by vector search, or no quote at all rather than a misleading one."
+    },
+    "azure": {
+      "summaryLabel": "Azure mode summary",
+      "mode": "Mode: {{mode}}",
+      "servicesConnected": "{{live}} of {{total}} services connected",
+      "signIn": "Sign-in: {{backend}}",
+      "localAccounts": "local accounts",
+      "tracing": "Tracing to Azure Monitor",
+      "intro": "Each Azure service is switched on by <b>its own endpoint</b>, not by the mode alone. A service with no endpoint is not an error: the demo implementation keeps running, and this screen names it. A service that is configured and then fails is a different thing again — it raises, rather than quietly falling back, so a case is never scored by something nobody chose.",
+      "connected": "Connected",
+      "notConfigured": "Not configured",
+      "runningInstead": "Running instead:",
+      "authLabel": "How Wathiq authenticates to Azure",
+      "authHeading": "Authentication",
+      "authBody": "On AKS this resolves to a <b>workload identity</b>: the pod exchanges its Kubernetes service-account token for an Entra token. No key for any Azure service is stored in the image, in a manifest or in the repository. The only two secrets that exist are the database password and the JWT signing key, and both are mounted from Key Vault.",
+      "notConnectedLabel": "What is not connected",
+      "statedPlainly": "Stated plainly",
+      "searchNote": "Azure AI Search is <b>deliberately not deployed</b>. The free tier in this subscription belongs to another system, and a paid Basic service would replace a pgvector retriever that already returns real policy citations. The adapter is written and tested; it is not paid for.",
+      "simulatedNote": "Core banking, the company registry and the sanctions list remain simulated in every mode. They are MCP tool servers with synthetic data, and the Integrations tab says so. Azure mode changes how documents are read and reasoned about — not what they are checked against."
+    },
+    "documentTypes": {
+      "schemaCaption": "Schema fields for {{name}}",
+      "columns": {
+        "field": "Field",
+        "labelEn": "Label (EN)",
+        "labelAr": "Label (AR)",
+        "type": "Type",
+        "rules": "Rules"
+      },
+      "required": "required",
+      "critical": "critical",
+      "emptyTitle": "No document types configured",
+      "emptyDescription": "A document type is a schema, a prompt, a rule set and a golden set — nothing in the engine changes when one is added.",
+      "intro": "Adding a document type is configuration only: schema, prompt, cross-field rules and a golden set. The extraction engine does not change.",
+      "fields_one": "{{count}} fields",
+      "fields_other": "{{count}} fields",
+      "crossFieldRules_one": "{{count}} cross-field rules",
+      "crossFieldRules_other": "{{count}} cross-field rules",
+      "active": "active",
+      "inactive": "inactive"
+    },
+    "integrations": {
+      "empty": "No integrations registered",
+      "intro": "Honest labels: <b>Connected</b> means a real external system answers. <b>Simulated</b> means the behaviour is reproduced locally and nothing leaves this machine. <b>Demo</b> means synthetic data stands in for a real feed.",
+      "docs": "Docs",
+      "category": {
+        "AI": "AI",
+        "Banking": "Banking",
+        "Compliance": "Compliance",
+        "Documents": "Documents",
+        "Identity": "Identity",
+        "Observability": "Observability",
+        "Process": "Process",
+        "Retrieval": "Retrieval",
+        "Safety": "Safety",
+        "Storage": "Storage"
+      }
+    },
+    "mode": {
+      "demoTitle": "Demo mode",
+      "azureTitle": "Azure mode",
+      "demoBody": "Everything runs locally: a deterministic fake model, demo OCR, a simulated core banking system and synthetic data. Nothing is sent to an external service, so the demo cannot break because of a network or quota problem.",
+      "azureBody": "Azure AI Foundry, Document Intelligence, Content Safety and AI Search are in use with the keys from the environment. The same code paths run in both modes — only the provider behind the interface changes.",
+      "configOnly": "The mode is configuration only. Switching it does not change a line of application code.",
+      "flagsTitle": "Feature flags",
+      "flagsDescription": "What this build has switched on.",
+      "noFlags": "No flags reported",
+      "on": "on",
+      "off": "off",
+      "flag": {
+        "demo_login": "Demo Login",
+        "azure_services": "Azure Services",
+        "entra_sign_in": "Entra Sign In",
+        "arabic_ui": "Arabic Ui",
+        "conductor_process_layer": "Conductor Process Layer"
+      }
+    },
+    "users": {
+      "adminsOnly": "Administrators only",
+      "adminsOnlyDescription": "User administration is restricted to the admin role. The API refuses this call for other roles as well.",
+      "empty": "No users",
+      "caption": "Users and roles",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "status": "Status"
+      },
+      "active": "active",
+      "disabled": "disabled"
+    },
+    "process": {
+      "fallbackEngine": "In-process engine (fallback)",
+      "inUse": "in use",
+      "standby": "standby",
+      "reachable": "reachable",
+      "notReachable": "not reachable",
+      "workflowRegistered": "The workflow definition in this repository is registered on the server.",
+      "workflowNotRegistered": "The workflow is not registered yet. A worker registers it when it starts.",
+      "kind": {
+        "simple": "worker task",
+        "human": "human task",
+        "wait": "timer",
+        "switch": "decision",
+        "join": "join",
+        "fork": "fork"
+      },
+      "writesExternally": "writes externally",
+      "writesExternallyHint": "The only step that changes something outside Wathiq. It refuses without an approval and carries an idempotency key.",
+      "onlyOnRoute": "only when a human is asked",
+      "auditIntegrityLabel": "Audit trail integrity",
+      "auditTrail": "Audit trail",
+      "appendOnly": "append-only, enforced by the database",
+      "notEnforced": "not enforced",
+      "entries_one": "{{formatted}} entries",
+      "entries_other": "{{formatted}} entries",
+      "doesNotProve": "What this does not prove:",
+      "loadError": "The process layer could not be read",
+      "regionLabel": "Process layer",
+      "configured": "configured: {{engine}}",
+      "runningOn": "running on: {{engine}}",
+      "inProcessEngine": "the in-process engine",
+      "fellBack": "Conductor unreachable — using the fallback",
+      "twoLayers": "Conductor runs the business process and can wait days for a person. LangGraph runs the AI reasoning inside one of its tasks. The Conductor workflow id is the LangGraph thread id, so a single identifier ties the process, the reasoning and the audit trail together.",
+      "engineRecorded": "Each case records which engine ran it, so a case processed by the fallback can never be mistaken for one that went through Conductor.",
+      "workflowTitle": "The workflow",
+      "workflowDescription": "Generated from the definition in the code, so it cannot draw a process we do not run.",
+      "workflowAria": "The Conductor workflow Wathiq runs for a KYC refresh",
+      "stepsTitle": "Steps",
+      "stepsDescription_one": "{{count}} steps. Worker queues: {{queues}}",
+      "stepsDescription_other": "{{count}} steps. Worker queues: {{queues}}",
+      "reviewSla": "Review SLA",
+      "hours_one": "{{count}} hours",
+      "hours_other": "{{count}} hours",
+      "slaBody": "The timer runs beside the human review, not after it. If it fires first, the review moves to the supervisor queue and the case priority is raised — the case is never decided or cancelled on a person's behalf. A review someone is already working on stays with them.",
+      "checking": "Checking…",
+      "runSweep": "Run the SLA check now",
+      "sweepNote": "The same sweep the timer runs. It can only escalate a review that is already overdue.",
+      "sweepError": "The check could not be run",
+      "sweepForbidden": "Only a supervisor or an admin can run the SLA check by hand."
+    }
+  },
+  "integrationStatus": {
+    "connected": {
+      "label": "Connected",
+      "hint": "Live service — real calls leave this machine."
+    },
+    "simulated": {
+      "label": "Simulated",
+      "hint": "Simulated service — no real external system is contacted."
+    },
+    "demo": {
+      "label": "Demo",
+      "hint": "Demo implementation with synthetic data, safe to show."
+    },
+    "disabled": {
+      "label": "Disabled",
+      "hint": "Switched off in this configuration."
+    }
+  },
+  "mode": {
+    "probeFailed": "The API did not answer the mode probe.",
+    "unknown": "MODE ?",
+    "demoHint": "Demo mode · v{{version}} — fake model, local services, synthetic data. Nothing leaves this machine.",
+    "azureHint": "Azure mode · v{{version}} — real Azure AI services are in use.",
+    "badge": {
+      "demo": "DEMO",
+      "azure": "AZURE"
+    }
+  },
+  "confidence": {
+    "none": "No confidence recorded",
+    "tooltip": "Calibrated {{calibrated}} · raw model score {{raw}}",
+    "level": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    }
+  },
+  "delta": {
+    "vsLastWeek": "vs last week"
+  },
+  "stepper": {
+    "label": "Pipeline progress",
+    "state": {
+      "pending": "pending",
+      "active": "active",
+      "waiting": "waiting",
+      "done": "done",
+      "failed": "failed"
+    }
+  },
+  "timeline": {
+    "promptTitle": "Prompt version used for this step",
+    "modelTitle": "Model version used for this step",
+    "prompt": "prompt {{version}}",
+    "model": "model {{version}}"
+  },
+  "charts": {
+    "predicted": "Predicted",
+    "observed": "Observed",
+    "samples": "Samples",
+    "perfectCalibration": "Perfect calibration",
+    "observedAccuracy": "Observed accuracy"
+  },
+  "mermaid": {
+    "renderError": "Diagram could not be rendered.",
+    "failed": "Diagram failed to render"
+  },
+  "gallery": {
+    "title": "Failure gallery",
+    "description": "The ways a case can go wrong, what catches each one, and what happens next. Run a failure to watch it caught live — every document here is synthetic.",
+    "filterLabel": "Filter by kind of failure",
+    "runnable": "Run it live",
+    "provenByTests": "Proven by tests",
+    "problem": "What goes wrong",
+    "detection": "How Wathiq catches it",
+    "outcome": "What happens next",
+    "whereToLook": "Where to look",
+    "run": "Run it",
+    "runNotAllowed": "Your role cannot create cases, so this one can only be read.",
+    "runHint": "Creates a real case from: {{files}}",
+    "openCase": "Open {{reference}}",
+    "evidence": "Proven by these tests",
+    "category": {
+      "all": "All",
+      "document": "Document",
+      "content": "Content safety",
+      "identity": "Identity",
+      "process": "Process",
+      "model": "Model"
+    }
   }
 }

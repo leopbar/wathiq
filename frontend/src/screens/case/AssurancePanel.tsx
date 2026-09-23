@@ -9,7 +9,9 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { CaseAssurance, CriticNote, GuardrailReport, WorkerResult } from "@/lib/types";
+import { formatDuration, formatNumber, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/EmptyState";
@@ -76,44 +78,50 @@ function Verdict({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 }
 
 function GuardrailCard({ report }: { report: GuardrailReport }) {
+  const { t } = useTranslation();
   const piiTypes = Object.entries(report.pii_counts);
   return (
     <div className="rounded-lg border border-border bg-surface-2/50 p-3">
-      <p className="truncate text-small font-medium text-ink">{report.filename}</p>
+      <p className="truncate text-small font-medium text-ink" dir="ltr">
+        {report.filename}
+      </p>
       <div className="mt-2 space-y-1.5">
         <Verdict ok={!report.injection.attacked}>
           {report.injection.attacked
-            ? `Prompt shield: ${report.injection.signals.length} suspicious pattern(s), risk ${Math.round(
-                report.injection.risk * 100,
-              )}%`
-            : "Prompt shield: no instruction-shaped text found"}
+            ? t("caseDetail.assurance.shieldAttacked", {
+                count: report.injection.signals.length,
+                risk: formatPercent(report.injection.risk),
+              })
+            : t("caseDetail.assurance.shieldClear")}
         </Verdict>
         {report.injection.attacked ? (
-          <ul className="ml-5 space-y-1">
+          <ul className="ms-5 space-y-1">
             {report.injection.signals.slice(0, 4).map((signal, index) => (
               <li key={`${signal.kind}-${index}`} className="text-caption text-ink-2">
-                <Badge tone="danger">{signal.kind}</Badge>{" "}
-                <span className="break-words">{signal.excerpt}</span>
+                <Badge tone="danger">
+                  <bdi>{signal.kind}</bdi>
+                </Badge>{" "}
+                <bdi className="break-words">{signal.excerpt}</bdi>
               </li>
             ))}
           </ul>
         ) : null}
         <Verdict ok={!report.safety.flagged}>
           {report.safety.flagged
-            ? `Content safety: flagged (${report.safety.matches.join(", ")})`
-            : "Content safety: nothing flagged"}
+            ? t("caseDetail.assurance.safetyFlagged", { matches: report.safety.matches.join(", ") })
+            : t("caseDetail.assurance.safetyClear")}
         </Verdict>
         <Verdict ok>
           {piiTypes.length === 0
-            ? "PII tokenisation: no identifiers found"
-            : `PII tokenisation: ${piiTypes
-                .map(([label, count]) => `${count}× ${label}`)
-                .join(", ")} replaced with tokens before logging`}
+            ? t("caseDetail.assurance.piiNone")
+            : t("caseDetail.assurance.piiReplaced", {
+                items: piiTypes.map(([label, count]) => `${count}× ${label}`).join(", "),
+              })}
         </Verdict>
         <Verdict ok>
           {report.sanitised
-            ? "Sanitiser: removed markup or invisible characters"
-            : "Sanitiser: nothing to remove"}
+            ? t("caseDetail.assurance.sanitised")
+            : t("caseDetail.assurance.sanitiserClear")}
         </Verdict>
       </div>
     </div>
@@ -121,33 +129,40 @@ function GuardrailCard({ report }: { report: GuardrailReport }) {
 }
 
 function WorkerCard({ worker }: { worker: WorkerResult }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-border bg-surface-2/50 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="truncate text-small font-medium text-ink">{worker.filename}</p>
+        <p className="truncate text-small font-medium text-ink" dir="ltr">
+          {worker.filename}
+        </p>
         <span className="flex items-center gap-1.5">
-          <Badge tone="neutral">{worker.field_count} fields</Badge>
-          <Badge tone={worker.attempts > 1 ? "warning" : "success"}>
-            {worker.attempts} attempt{worker.attempts === 1 ? "" : "s"}
+          <Badge tone="neutral">
+            {t("caseDetail.assurance.fields", { count: worker.field_count })}
           </Badge>
-          <Badge tone="outline">{worker.duration_ms} ms</Badge>
+          <Badge tone={worker.attempts > 1 ? "warning" : "success"}>
+            {t("caseDetail.assurance.attempts", { count: worker.attempts })}
+          </Badge>
+          <Badge tone="outline">{formatDuration(worker.duration_ms)}</Badge>
         </span>
       </div>
 
       {worker.repairs.length === 0 ? (
         <p className="mt-2 text-caption text-ink-2">
-          Every value validated on the first read — no self-correction was needed.
+          {t("caseDetail.assurance.noRepairs")}
         </p>
       ) : (
         <ul className="mt-2 space-y-1.5">
           {worker.repairs.map((repair, index) => (
             <li key={`${repair.field}-${index}`} className="text-caption text-ink-2">
-              <span className="font-medium text-ink">{repair.field}</span>{" "}
-              <Badge tone="outline">pass {repair.pass}</Badge>{" "}
+              <code className="font-medium text-ink" dir="ltr">
+                {repair.field}
+              </code>{" "}
+              <Badge tone="outline">{t("caseDetail.assurance.pass", { pass: repair.pass })}</Badge>{" "}
               <Badge tone={repair.strategy === "drop" ? "danger" : "info"}>{repair.strategy}</Badge>
               <span className="mt-0.5 block">
                 {repair.error}. {repair.explanation}
-                {repair.after ? ` → ${repair.after}` : " → left empty"}
+                {repair.after ? ` → ${repair.after}` : ` → ${t("caseDetail.assurance.leftEmpty")}`}
               </span>
             </li>
           ))}
@@ -156,10 +171,10 @@ function WorkerCard({ worker }: { worker: WorkerResult }) {
 
       {worker.examples.length > 0 ? (
         <p className="mt-2 border-t border-border pt-2 text-caption text-ink-2">
-          Few-shot examples selected for the prompt:{" "}
-          {worker.examples.map((example) => example.id).join(", ")}{" "}
+          {t("caseDetail.assurance.fewShot")}{" "}
+          <bdi>{worker.examples.map((example) => example.id).join(", ")}</bdi>{" "}
           <span className="text-ink-2/80">
-            (selection runs in demo mode; the demo extractor makes no model call)
+            {t("caseDetail.assurance.fewShotNote")}
           </span>
         </p>
       ) : null}
@@ -168,6 +183,7 @@ function WorkerCard({ worker }: { worker: WorkerResult }) {
 }
 
 function CriticRow({ note }: { note: CriticNote }) {
+  const { t } = useTranslation();
   return (
     <li className="flex items-start gap-2 py-1.5">
       {note.agreed ? (
@@ -176,20 +192,23 @@ function CriticRow({ note }: { note: CriticNote }) {
         <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-hidden />
       )}
       <span className="min-w-0 flex-1">
-        <span className="text-small text-ink">{note.field}</span>
+        <code className="text-small text-ink" dir="ltr">
+          {note.field}
+        </code>
         <span className="mt-0.5 block text-caption text-ink-2">{note.reason}</span>
       </span>
-      <Badge tone="outline">{note.via === "local" ? "in-process" : note.via}</Badge>
+      <Badge tone="outline">{note.via === "local" ? t("caseDetail.assurance.inProcess") : note.via}</Badge>
     </li>
   );
 }
 
 export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
+  const { t } = useTranslation();
   if (!assurance.available) {
     return (
       <EmptyState
         icon={Shield}
-        title="No agent checkpoint for this case"
+        title={t("caseDetail.assurance.noCheckpoint")}
         description={assurance.note}
       />
     );
@@ -204,13 +223,15 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
     <div className="divide-y divide-border">
       <Section
         icon={Shield}
-        title="Guardrails"
-        subtitle="Prompt shield, content safety and PII tokenisation, before anything read the text"
+        title={t("caseDetail.assurance.guardrails")}
+        subtitle={t("caseDetail.assurance.guardrailsSubtitle")}
         badge={
           blocked.length > 0 ? (
-            <Badge tone="danger">{blocked.length} flagged</Badge>
+            <Badge tone="danger">
+              {t("caseDetail.assurance.flagged", { count: blocked.length })}
+            </Badge>
           ) : (
-            <Badge tone="success">all clear</Badge>
+            <Badge tone="success">{t("caseDetail.assurance.allClear")}</Badge>
           )
         }
         defaultOpen={blocked.length > 0}
@@ -224,23 +245,35 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
 
       <Section
         icon={Cpu}
-        title="Supervisor and workers"
-        subtitle="One worker per document, dispatched in parallel, each self-correcting on its own validation errors"
-        badge={<Badge tone="neutral">{dispatched.length} in parallel</Badge>}
+        title={t("caseDetail.assurance.workers")}
+        subtitle={t("caseDetail.assurance.workersSubtitle")}
+        badge={
+          <Badge tone="neutral">
+            {t("caseDetail.assurance.inParallel", { count: dispatched.length })}
+          </Badge>
+        }
       >
         <ul className="mb-3 space-y-1">
           {assurance.plan.map((item) => (
             <li key={item.document_id} className="text-caption text-ink-2">
-              <span className="text-ink">{item.filename}</span> → {item.doc_type}{" "}
+              <bdi className="text-ink">{item.filename}</bdi>{" "}
+              <span aria-hidden className="inline-block rtl:-scale-x-100">
+                →
+              </span>{" "}
+              {t(`catalog.docType.${item.doc_type}`, { defaultValue: item.doc_type })}{" "}
               <Badge tone="outline">
-                {Math.round(item.classification_confidence * 100)}% sure
+                {t("caseDetail.assurance.sure", {
+                  value: formatPercent(item.classification_confidence),
+                })}
               </Badge>{" "}
               {item.dispatched ? null : (
-                <Badge tone="warning">not dispatched: {item.skipped_because}</Badge>
+                <Badge tone="warning">
+                  {t("caseDetail.assurance.notDispatched", { reason: item.skipped_because })}
+                </Badge>
               )}
               {item.evidence.length > 0 ? (
                 <span className="mt-0.5 block text-ink-2/80">
-                  matched on: {item.evidence.join(", ")}
+                  {t("caseDetail.assurance.matchedOn", { evidence: item.evidence.join(", ") })}
                 </span>
               ) : null}
             </li>
@@ -255,19 +288,23 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
 
       <Section
         icon={Search}
-        title="Critic"
-        subtitle="An independent second read of every value: is it on the page, is it the right shape, is it under the right label"
+        title={t("caseDetail.assurance.critic")}
+        subtitle={t("caseDetail.assurance.criticSubtitle")}
         badge={
           disagreements.length > 0 ? (
-            <Badge tone="warning">{disagreements.length} disagreed</Badge>
+            <Badge tone="warning">
+              {t("caseDetail.assurance.disagreed", { count: disagreements.length })}
+            </Badge>
           ) : (
-            <Badge tone="success">agreed on all {assurance.critic_notes.length}</Badge>
+            <Badge tone="success">
+              {t("caseDetail.assurance.agreedAll", { count: assurance.critic_notes.length })}
+            </Badge>
           )
         }
         defaultOpen={disagreements.length > 0}
       >
         {assurance.critic_notes.length === 0 ? (
-          <p className="text-caption text-ink-2">The critic had no values to challenge.</p>
+          <p className="text-caption text-ink-2">{t("caseDetail.assurance.criticEmpty")}</p>
         ) : (
           <ul className="divide-y divide-border">
             {[...disagreements, ...assurance.critic_notes.filter((n) => n.agreed)].map((note) => (
@@ -279,31 +316,35 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
 
       <Section
         icon={Search}
-        title="Investigation"
-        subtitle="A bounded ReAct loop: a question, a tool, an observation — for what the documents cannot answer"
-        badge={<Badge tone="neutral">{assurance.investigation.length} steps</Badge>}
+        title={t("caseDetail.assurance.investigation")}
+        subtitle={t("caseDetail.assurance.investigationSubtitle")}
+        badge={
+          <Badge tone="neutral">
+            {t("caseDetail.assurance.steps", { count: assurance.investigation.length })}
+          </Badge>
+        }
         defaultOpen={assurance.investigation.length > 0}
       >
         {assurance.investigation.length === 0 ? (
           <p className="text-caption text-ink-2">
-            Nothing needed asking of the outside world for this case.
+            {t("caseDetail.assurance.investigationEmpty")}
           </p>
         ) : (
           <ol className="space-y-3">
             {assurance.investigation.map((step) => (
               <li key={step.index} className="rounded-lg border border-border bg-surface-2/50 p-3">
                 <p className="text-caption text-ink-2">
-                  <span className="label-caption text-ink-2">Thought</span>
+                  <span className="label-caption text-ink-2">{t("caseDetail.assurance.thought")}</span>
                   <span className="mt-0.5 block text-small text-ink">{step.thought}</span>
                 </p>
                 <p className="mt-2 text-caption text-ink-2">
-                  <span className="label-caption text-ink-2">Action</span>
+                  <span className="label-caption text-ink-2">{t("caseDetail.assurance.action")}</span>
                   <code className="mt-0.5 block text-caption text-ink" dir="ltr">
                     {step.action}
                   </code>
                 </p>
                 <p className="mt-2 text-caption text-ink-2">
-                  <span className="label-caption text-ink-2">Observation</span>
+                  <span className="label-caption text-ink-2">{t("caseDetail.assurance.observation")}</span>
                   <span
                     className={cn("mt-0.5 block text-small", step.ok ? "text-ink" : "text-danger")}
                   >
@@ -318,18 +359,22 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
 
       <Section
         icon={Wrench}
-        title="Tool calls"
-        subtitle="Every MCP call this case made, in order, with what came back"
+        title={t("caseDetail.assurance.toolCalls")}
+        subtitle={t("caseDetail.assurance.toolCallsSubtitle")}
         badge={
           failedCalls.length > 0 ? (
-            <Badge tone="danger">{failedCalls.length} failed</Badge>
+            <Badge tone="danger">
+              {t("caseDetail.assurance.failedCalls", { count: failedCalls.length })}
+            </Badge>
           ) : (
-            <Badge tone="neutral">{assurance.tool_calls.length} calls</Badge>
+            <Badge tone="neutral">
+              {t("caseDetail.assurance.calls", { count: assurance.tool_calls.length })}
+            </Badge>
           )
         }
       >
         {assurance.tool_calls.length === 0 ? (
-          <p className="text-caption text-ink-2">No external tools were needed.</p>
+          <p className="text-caption text-ink-2">{t("caseDetail.assurance.noTools")}</p>
         ) : (
           <ul className="divide-y divide-border">
             {assurance.tool_calls.map((call, index) => (
@@ -338,8 +383,8 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
                   <code className="text-caption text-ink" dir="ltr">
                     {call.server}.{call.tool}
                   </code>
-                  <Badge tone={call.ok ? "success" : "danger"}>{call.ok ? "ok" : "failed"}</Badge>
-                  <Badge tone="outline">{call.duration_ms} ms</Badge>
+                  <Badge tone={call.ok ? "success" : "danger"}>{call.ok ? t("caseDetail.assurance.ok") : t("caseDetail.assurance.failed")}</Badge>
+                  <Badge tone="outline">{formatDuration(call.duration_ms)}</Badge>
                   {call.server !== "document_store" ? (
                     <SimulatedBadge status="simulated" />
                   ) : null}
@@ -355,13 +400,15 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
 
       <Section
         icon={CheckCircle2}
-        title="Rules and calibration"
-        subtitle="Which versioned rule pack judged this case, and whether its confidence went through a fitted curve"
+        title={t("caseDetail.assurance.rules")}
+        subtitle={t("caseDetail.assurance.rulesSubtitle")}
       >
         <dl className="space-y-2">
           {Object.entries(assurance.rule_packs).map(([docType, reference]) => (
             <div key={docType} className="flex items-center justify-between gap-2">
-              <dt className="text-caption text-ink-2">{docType}</dt>
+              <dt className="text-caption text-ink-2">
+                {t(`catalog.docType.${docType}`, { defaultValue: docType })}
+              </dt>
               <dd>
                 <code className="text-caption text-ink" dir="ltr">
                   {reference}
@@ -371,7 +418,11 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
           ))}
           {Object.entries(assurance.prompt_versions).map(([docType, version]) => (
             <div key={`prompt-${docType}`} className="flex items-center justify-between gap-2">
-              <dt className="text-caption text-ink-2">{docType} prompt</dt>
+              <dt className="text-caption text-ink-2">
+                {t("caseDetail.assurance.promptFor", {
+                  docType: t(`catalog.docType.${docType}`, { defaultValue: docType }),
+                })}
+              </dt>
               <dd>
                 <code className="text-caption text-ink" dir="ltr">
                   {version}
@@ -380,19 +431,16 @@ export function AssurancePanel({ assurance }: { assurance: CaseAssurance }) {
             </div>
           ))}
           <div className="border-t border-border pt-2">
-            <dt className="label-caption text-ink-2">Confidence calibration</dt>
+            <dt className="label-caption text-ink-2">{t("caseDetail.assurance.calibration")}</dt>
             <dd className="mt-0.5 text-caption text-ink-2">
               {assurance.calibration.fitted ? (
-                <>
-                  Fitted on {assurance.calibration.sample_count} reviewed field(s). Brier score{" "}
-                  {assurance.calibration.brier_before.toFixed(3)} →{" "}
-                  {assurance.calibration.brier_after.toFixed(3)}.
-                </>
+                t("caseDetail.assurance.calibrationFitted", {
+                  count: assurance.calibration.sample_count,
+                  before: formatNumber(assurance.calibration.brier_before, 3),
+                  after: formatNumber(assurance.calibration.brier_after, 3),
+                })
               ) : (
-                <>
-                  Not fitted yet, so the numbers on this case are the extractor&rsquo;s raw
-                  scores. They are shown as raw rather than presented as calibrated.
-                </>
+                t("caseDetail.assurance.calibrationNotFitted")
               )}
             </dd>
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, ClipboardCheck, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -10,8 +11,7 @@ import type {
   ExtractedField,
   ProcessStatus,
 } from "@/lib/types";
-import { CASE_TYPE_LABEL } from "@/lib/constants";
-import { formatDateTime, formatDuration, formatUsd } from "@/lib/format";
+import { formatDateTime, formatDuration, formatNumber, formatUsd } from "@/lib/format";
 import { useAuth } from "@/auth/useAuth";
 import { can } from "@/auth/roles";
 import { PageHeader } from "@/components/PageHeader";
@@ -54,6 +54,8 @@ function MetaItem({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export default function CaseDetail() {
+  const { t, i18n } = useTranslation();
+  const arabic = i18n.language.startsWith("ar");
   const { id = "" } = useParams();
   const { role } = useAuth();
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -125,7 +127,7 @@ export default function CaseDetail() {
     [caseData, selectedDocumentId],
   );
 
-  const openReviewTask = caseData?.review_tasks.find((t) => t.status !== "completed");
+  const openReviewTask = caseData?.review_tasks.find((task) => task.status !== "completed");
 
   if (query.isPending) return <DetailSkeleton />;
 
@@ -135,7 +137,7 @@ export default function CaseDetail() {
         <ErrorState
           error={query.error}
           onRetry={() => void query.refetch()}
-          title="This case could not be loaded"
+          title={t("caseDetail.loadError")}
         />
       </Card>
     );
@@ -157,30 +159,34 @@ export default function CaseDetail() {
             className="inline-flex items-center gap-1 text-small text-ink-2 hover:text-ink"
           >
             <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
-            All cases
+            {t("caseDetail.allCases")}
           </Link>
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="tabular">{detail.reference}</span>
+            <bdi className="tabular">{detail.reference}</bdi>
             <StatusPill status={detail.status} />
-            {detail.straight_through ? <Badge tone="success">Straight-through</Badge> : null}
+            {detail.straight_through ? (
+              <Badge tone="success">{t("dashboard.straightThrough")}</Badge>
+            ) : null}
           </span>
         }
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-ink">{detail.customer_name}</span>
-            <span dir="rtl" className="text-ink-2">
-              {detail.customer_name_ar}
+            <span className="text-ink" dir={arabic && detail.customer_name_ar ? "rtl" : "ltr"}>
+              {arabic && detail.customer_name_ar ? detail.customer_name_ar : detail.customer_name}
             </span>
-            <span className="text-ink-2">· {CASE_TYPE_LABEL[detail.case_type]}</span>
+            <span dir={arabic && detail.customer_name_ar ? "ltr" : "rtl"} className="text-ink-2">
+              {arabic && detail.customer_name_ar ? detail.customer_name : detail.customer_name_ar}
+            </span>
+            <span className="text-ink-2">· {t(`catalog.caseType.${detail.case_type}`)}</span>
           </span>
         }
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => void query.refetch()}>
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Refresh
+              {t("common.refresh")}
             </Button>
             {openReviewTask && can(role, "review") ? (
               <Link
@@ -188,7 +194,7 @@ export default function CaseDetail() {
                 className={buttonVariants({ variant: "primary", size: "sm" })}
               >
                 <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
-                Open review task
+                {t("caseDetail.openReviewTask")}
               </Link>
             ) : null}
           </>
@@ -197,44 +203,62 @@ export default function CaseDetail() {
 
       <Card className="p-4">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
-          <MetaItem label="Confidence" value={<ConfidenceBadge value={detail.confidence} />} />
-          <MetaItem label="Risk" value={<RiskPill risk={detail.risk_level} />} />
-          <MetaItem label="Priority" value={<PriorityPill priority={detail.priority} />} />
           <MetaItem
-            label="SLA"
+            label={t("caseDetail.meta.confidence")}
+            value={<ConfidenceBadge value={detail.confidence} />}
+          />
+          <MetaItem label={t("caseDetail.meta.risk")} value={<RiskPill risk={detail.risk_level} />} />
+          <MetaItem
+            label={t("caseDetail.meta.priority")}
+            value={<PriorityPill priority={detail.priority} />}
+          />
+          <MetaItem
+            label={t("caseDetail.meta.sla")}
             value={<SlaTimer dueAt={detail.sla_due_at} state={detail.sla_state} />}
           />
-          <MetaItem label="Processing" value={formatDuration(detail.processing_ms)} />
-          <MetaItem label="Cost" value={formatUsd(detail.cost_usd)} />
-          <MetaItem label="Created" value={formatDateTime(detail.created_at)} />
-          <MetaItem label="Updated" value={formatDateTime(detail.updated_at)} />
-          <MetaItem label="Created by" value={detail.created_by?.full_name ?? "—"} />
-          <MetaItem label="Assigned to" value={detail.assigned_to?.full_name ?? "Unassigned"} />
           <MetaItem
-            label="Documents"
-            value={`${detail.documents.length} file${detail.documents.length === 1 ? "" : "s"}`}
+            label={t("caseDetail.meta.processing")}
+            value={formatDuration(detail.processing_ms)}
+          />
+          <MetaItem label={t("caseDetail.meta.cost")} value={formatUsd(detail.cost_usd)} />
+          <MetaItem label={t("caseDetail.meta.created")} value={formatDateTime(detail.created_at)} />
+          <MetaItem label={t("caseDetail.meta.updated")} value={formatDateTime(detail.updated_at)} />
+          <MetaItem
+            label={t("caseDetail.meta.createdBy")}
+            value={detail.created_by?.full_name ?? "—"}
           />
           <MetaItem
-            label="Findings"
-            value={`${detail.open_finding_count} open / ${detail.finding_count}`}
+            label={t("caseDetail.meta.assignedTo")}
+            value={detail.assigned_to?.full_name ?? t("caseDetail.meta.unassigned")}
+          />
+          <MetaItem
+            label={t("caseDetail.meta.documents")}
+            value={t("caseDetail.meta.files", { count: detail.documents.length })}
+          />
+          <MetaItem
+            label={t("caseDetail.meta.findings")}
+            value={t("caseDetail.meta.openOfTotal", {
+              open: formatNumber(detail.open_finding_count),
+              total: formatNumber(detail.finding_count),
+            })}
           />
         </dl>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          <Badge tone="primary">Conductor workflow / LangGraph thread</Badge>
+          <Badge tone="primary">{t("pipelineProgress.thread")}</Badge>
           <code className="truncate text-caption text-ink tabular" dir="ltr">
             {detail.thread_id}
           </code>
-          <CopyButton value={detail.thread_id} label="Copy thread id" />
+          <CopyButton value={detail.thread_id} label={t("pipelineProgress.copyThread")} />
           <span className="text-caption text-ink-2">
-            One identifier links the process layer, the agent graph and the audit trail.
+            {t("caseDetail.threadNote")}
           </span>
         </div>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,24rem)]">
         <Card className="h-fit overflow-hidden">
-          <CardHeader title="Documents" />
+          <CardHeader title={t("caseDetail.meta.documents")} />
           <DocumentList
             documents={detail.documents}
             selectedId={selectedDocumentId}
@@ -263,7 +287,7 @@ export default function CaseDetail() {
             items={[
               {
                 value: "fields",
-                label: "Fields",
+                label: t("caseDetail.tabs.fields"),
                 badge: <Badge tone="neutral">{detail.fields.length}</Badge>,
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin">
@@ -278,7 +302,7 @@ export default function CaseDetail() {
               },
               {
                 value: "findings",
-                label: "Findings",
+                label: t("caseDetail.tabs.findings"),
                 badge:
                   detail.open_finding_count > 0 ? (
                     <Badge tone="warning">{detail.open_finding_count}</Badge>
@@ -293,14 +317,16 @@ export default function CaseDetail() {
               },
               {
                 value: "process",
-                label: "Process",
+                label: t("caseDetail.tabs.process"),
                 badge: processQuery.data ? (
                   processQuery.data.finished ? (
-                    <Badge tone="success">finished</Badge>
+                    <Badge tone="success">{t("caseDetail.finished")}</Badge>
                   ) : (
                     <Badge tone="neutral">
-                      {processQuery.data.steps.filter((step) => step.status === "completed").length}
-                      /{processQuery.data.steps.length}
+                      <bdi>
+                        {processQuery.data.steps.filter((step) => step.status === "completed").length}
+                        /{processQuery.data.steps.length}
+                      </bdi>
                     </Badge>
                   )
                 ) : undefined,
@@ -310,11 +336,15 @@ export default function CaseDetail() {
                       <ProcessPanel status={processQuery.data} />
                     ) : (
                       <EmptyState
-                        title={processQuery.isPending ? "Loading…" : "The process view is unavailable"}
+                        title={
+                          processQuery.isPending
+                            ? t("caseDetail.loadingEllipsis")
+                            : t("caseDetail.processUnavailable")
+                        }
                         description={
                           processQuery.isPending
-                            ? "Reading this case's process record."
-                            : "The process layer could not be asked about this case."
+                            ? t("caseDetail.readingProcess")
+                            : t("caseDetail.processUnavailableDescription")
                         }
                       />
                     )}
@@ -323,12 +353,12 @@ export default function CaseDetail() {
               },
               {
                 value: "assurance",
-                label: "Assurance",
+                label: t("caseDetail.tabs.assurance"),
                 badge:
                   assuranceQuery.data?.available === false ? (
-                    <Badge tone="outline">seeded</Badge>
+                    <Badge tone="outline">{t("caseDetail.seeded")}</Badge>
                   ) : assuranceQuery.data ? (
-                    <Badge tone="neutral">{assuranceQuery.data.tool_calls.length} tools</Badge>
+                    <Badge tone="neutral">{t("caseDetail.tools", { count: assuranceQuery.data.tool_calls.length })}</Badge>
                   ) : undefined,
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin">
@@ -336,11 +366,15 @@ export default function CaseDetail() {
                       <AssurancePanel assurance={assuranceQuery.data} />
                     ) : (
                       <EmptyState
-                        title={assuranceQuery.isPending ? "Loading…" : "No evidence available"}
+                        title={
+                          assuranceQuery.isPending
+                            ? t("caseDetail.loadingEllipsis")
+                            : t("caseDetail.noEvidence")
+                        }
                         description={
                           assuranceQuery.isPending
-                            ? "Reading the agent's checkpoint."
-                            : "The agent checkpoint for this case could not be read."
+                            ? t("caseDetail.readingCheckpoint")
+                            : t("caseDetail.noEvidenceDescription")
                         }
                       />
                     )}
@@ -349,14 +383,14 @@ export default function CaseDetail() {
               },
               {
                 value: "timeline",
-                label: "Timeline",
+                label: t("caseDetail.tabs.timeline"),
                 badge: <Badge tone="neutral">{detail.timeline.length}</Badge>,
                 content: (
                   <div className="h-full overflow-y-auto scroll-thin p-4">
                     {detail.timeline.length === 0 ? (
                       <EmptyState
-                        title="No events yet"
-                        description="The agent timeline fills in as the pipeline runs."
+                        title={t("caseDetail.noEvents")}
+                        description={t("caseDetail.noEventsDescription")}
                       />
                     ) : (
                       <Timeline events={detail.timeline} />

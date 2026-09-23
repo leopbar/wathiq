@@ -1,4 +1,5 @@
 import { AlertCircle, Crosshair, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Document, ExtractedField, FieldStatus } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
@@ -14,13 +15,6 @@ const STATUS_TONE: Record<FieldStatus, "success" | "warning" | "info" | "danger"
   rejected: "danger",
 };
 
-const STATUS_LABEL: Record<FieldStatus, string> = {
-  auto_accepted: "Auto-accepted",
-  needs_review: "Needs review",
-  corrected: "Corrected",
-  rejected: "Rejected",
-};
-
 export function FieldsPanel({
   fields,
   documents,
@@ -32,11 +26,13 @@ export function FieldsPanel({
   selectedFieldId: string | null;
   onSelectField: (field: ExtractedField) => void;
 }) {
+  const { t, i18n } = useTranslation();
+  const arabic = i18n.language.startsWith("ar");
   if (fields.length === 0) {
     return (
       <EmptyState
-        title="No fields extracted yet"
-        description="Fields appear once the extract node has run for this case."
+        title={t("caseDetail.fields.empty")}
+        description={t("caseDetail.fields.emptyDescription")}
       />
     );
   }
@@ -58,7 +54,11 @@ export function FieldsPanel({
       {groups.map((group, index) => (
         <section key={group.document?.id ?? `orphan-${index}`}>
           <h3 className="label-caption sticky top-0 z-10 border-b border-border bg-surface-2 px-4 py-2 text-ink-2">
-            {group.document?.doc_type_label ?? "Cross-document"}
+            {group.document
+              ? t(`catalog.docType.${group.document.doc_type}`, {
+                  defaultValue: group.document.doc_type_label,
+                })
+              : t("caseDetail.fields.crossDocument")}
           </h3>
           <ul className="divide-y divide-border">
             {group.fields.map((field) => {
@@ -79,14 +79,14 @@ export function FieldsPanel({
                       <div className="min-w-0">
                         <p className="flex items-center gap-1.5 text-small font-medium text-ink">
                           {field.is_critical ? (
-                            <Tooltip content="Critical field — a wrong value here blocks the case.">
+                            <Tooltip content={t("caseDetail.fields.criticalHint")}>
                               <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-danger" />
                             </Tooltip>
                           ) : null}
-                          <span className="truncate">{field.label_en}</span>
+                          <span className="truncate">{arabic ? field.label_ar : field.label_en}</span>
                         </p>
-                        <p className="truncate text-caption text-ink-2" dir="rtl">
-                          {field.label_ar}
+                        <p className="truncate text-caption text-ink-2" dir={arabic ? "ltr" : "rtl"}>
+                          {arabic ? field.label_en : field.label_ar}
                         </p>
                       </div>
                       <ConfidenceBadge
@@ -102,32 +102,36 @@ export function FieldsPanel({
                         value ? "text-ink" : "text-ink-2 italic",
                       )}
                     >
-                      {value ?? "not found"}
+                      {value ? <bdi>{value}</bdi> : t("caseDetail.fields.notFound")}
                     </p>
 
                     {field.corrected_value && field.value ? (
-                      <p className="mt-0.5 text-caption text-ink-2 line-through">{field.value}</p>
+                      <p className="mt-0.5 text-caption text-ink-2 line-through">
+                        <bdi>{field.value}</bdi>
+                      </p>
                     ) : null}
 
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <Badge tone={STATUS_TONE[field.status]}>{STATUS_LABEL[field.status]}</Badge>
+                      <Badge tone={STATUS_TONE[field.status]}>{t(`caseDetail.fields.status.${field.status}`)}</Badge>
                       {field.bbox ? (
                         <Badge tone="outline">
                           <Crosshair className="h-3 w-3" aria-hidden />
-                          page {field.page ?? 1}
+                          {t("caseDetail.fields.page", { page: field.page ?? 1 })}
                         </Badge>
                       ) : (
                         <Badge tone="outline">
                           <AlertCircle className="h-3 w-3" aria-hidden />
-                          no source region
+                          {t("caseDetail.fields.noSourceRegion")}
                         </Badge>
                       )}
-                      <code className="text-caption text-ink-2/80">{field.name}</code>
+                      <code className="text-caption text-ink-2/80" dir="ltr">
+                        {field.name}
+                      </code>
                     </div>
 
                     {active && field.signals && field.signals.length > 0 ? (
                       <div className="mt-3 border-t border-border pt-3">
-                        <p className="label-caption mb-1.5 text-ink-2">Why this confidence</p>
+                        <p className="label-caption mb-1.5 text-ink-2">{t("caseDetail.fields.whyConfidence")}</p>
                         <ConfidenceSignals signals={field.signals} />
                       </div>
                     ) : null}

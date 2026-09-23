@@ -8,6 +8,7 @@ import {
   Info,
   ScrollText,
   Settings,
+  ShieldAlert,
   Sparkles,
 } from "lucide-react";
 import type { Capability } from "@/auth/roles";
@@ -49,6 +50,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/quality", labelKey: "nav.quality", icon: FlaskConical, capability: "quality" },
       { to: "/prompts", labelKey: "nav.prompts", icon: Sparkles, capability: "prompts" },
       { to: "/audit", labelKey: "nav.audit", icon: ScrollText, capability: "audit" },
+      {
+        to: "/failures",
+        labelKey: "nav.gallery",
+        icon: ShieldAlert,
+        capability: "gallery",
+      },
     ],
   },
   {

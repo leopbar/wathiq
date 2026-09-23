@@ -1,0 +1,137 @@
+{{/*
+The API: FastAPI, the LangGraph engine, SSE.
+
+Three things here are not boilerplate:
+
+* **`azure.workload.identity/use: "true"`** on the pod labels. Without this label the webhook
+  does not project the token and every Azure call fails with an authentication error that says
+  nothing about a missing label.
+* **A readiness probe separate from liveness.** `/healthz` answers as soon as the process is
+  up; readiness additionally waits for the database. Without the split, a pod that cannot reach
+  PostgreSQL is killed and restarted forever instead of simply being kept out of the Service.
+* **`readOnlyRootFilesystem: true`** with two explicit `emptyDir` mounts. Anything that writes
+  has to say so, which is why `/tmp` and the storage directory are declared. In Azure mode
+  documents go to ADLS and the local directory stays empty — it exists so that a deployment
+  with no storage endpoint still works rather than crashing on a read-only filesystem.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wathiq.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  # This demo is deliberately one node / one replica. Recreate avoids the default rolling
+  # surge temporarily requiring room for a second copy that the node was never sized for.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wathiq.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "wathiq.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        {{- if .Values.workloadIdentity.enabled }}
+        azure.workload.identity/use: "true"
+        {{- end }}
+      annotations:
+        # Restart the pods when the rendered config changes, so a values edit actually takes
+        # effect instead of leaving the old environment running until something else evicts it.
+        checksum/config: {{ include "wathiq.env" . | sha256sum }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        fsGroup: 1001
+      initContainers:
+        {{- include "wathiq.waitForMigration" . | nindent 8 }}
+      containers:
+        - name: api
+          image: {{ include "wathiq.image" (dict "root" . "name" "wathiq-api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+          env:
+            {{- include "wathiq.env" . | nindent 12 }}
+          # Liveness: is the process alive? A generous failure threshold, because restarting
+          # the API kills any case mid-run and that is far more disruptive than a slow probe.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # Readiness: can it serve? Checks its dependencies, so a pod that cannot reach the
+          # database leaves the Service instead of being restarted in a loop.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Startup: gives a cold start up to two minutes — the first boot builds the policy
+          # index and prepares the checkpointer tables — without loosening liveness afterwards.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "wathiq.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage
+              mountPath: /app/storage
+            {{- if .Values.keyVault.enabled }}
+            # Mounted so the CSI driver syncs the secrets into the Kubernetes Secret that
+            # `secretKeyRef` reads. Nothing reads these files directly.
+            - name: secrets-store
+              mountPath: /mnt/secrets
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: storage
+          emptyDir: {}
+        {{- if .Values.keyVault.enabled }}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "wathiq.fullname" . }}-kv
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wathiq.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.api.port }}
+      targetPort: http
+      name: http
+  selector:
+    {{- include "wathiq.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api

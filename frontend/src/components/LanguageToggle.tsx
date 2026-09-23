@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Languages } from "lucide-react";
-import { applyLang, type AppLang } from "@/i18n";
+import type { AppLang } from "@/i18n";
 import { Button } from "./ui/button";
 import { Tooltip } from "./ui/tooltip";
 
@@ -12,7 +12,6 @@ export function LanguageToggle() {
 
   const switchTo = () => {
     void i18n.changeLanguage(next);
-    applyLang(next);
   };
 
   return (

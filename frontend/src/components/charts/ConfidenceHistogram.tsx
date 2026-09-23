@@ -1,4 +1,5 @@
 import { Bar, BarChart, Cell, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useTranslation } from "react-i18next";
 import type { DashboardCharts } from "@/lib/types";
 import { axisProps, tooltipStyles } from "./ChartTooltip";
 import { chartMargin, useChartPalette } from "./chartTheme";
@@ -13,6 +14,7 @@ function bucketTone(bucket: string): "low" | "medium" | "high" {
 }
 
 export function ConfidenceHistogram({ data }: { data: DashboardCharts["confidence_histogram"] }) {
+  const { t } = useTranslation();
   const palette = useChartPalette();
   const styles = tooltipStyles(palette);
   const tone = { low: palette.danger, medium: palette.warning, high: palette.success };
@@ -24,7 +26,7 @@ export function ConfidenceHistogram({ data }: { data: DashboardCharts["confidenc
         <XAxis dataKey="bucket" {...axisProps(palette)} />
         <YAxis allowDecimals={false} width={40} {...axisProps(palette)} />
         <Tooltip {...styles} />
-        <Bar dataKey="count" name="Fields" radius={[4, 4, 0, 0]} maxBarSize={44}>
+        <Bar dataKey="count" name={t("dashboard.fields")} radius={[4, 4, 0, 0]} maxBarSize={44}>
           {data.map((row) => (
             <Cell key={row.bucket} fill={tone[bucketTone(row.bucket)]} />
           ))}

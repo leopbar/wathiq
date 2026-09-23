@@ -1,4 +1,5 @@
 import { CheckCircle2, CircleDot, Archive } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { PromptStatus, PromptVersion } from "@/lib/types";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -25,6 +26,7 @@ export function VersionTimeline({
   selected: string | null;
   onSelect: (version: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ol className="space-y-1">
       {versions.map((version) => {
@@ -57,10 +59,12 @@ export function VersionTimeline({
                   <span className="text-small font-semibold text-ink tabular">
                     v{version.version}
                   </span>
-                  <Badge tone={STATUS_TONE[version.status]}>{version.status}</Badge>
+                  <Badge tone={STATUS_TONE[version.status]}>
+                    {t(`prompts.status.${version.status}`)}
+                  </Badge>
                 </span>
                 <span className="mt-0.5 block truncate text-caption text-ink-2">
-                  {version.created_by} · {formatDateTime(version.created_at)}
+                  <bdi>{version.created_by}</bdi> · {formatDateTime(version.created_at)}
                 </span>
               </span>
             </button>

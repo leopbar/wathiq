@@ -1,0 +1,104 @@
+{{/*
+The four MCP tool servers — one Deployment and one Service each.
+
+**This is what makes least privilege real.** The agent enforces an allow-list per graph node in
+code, but code can be changed by mistake. Four separate processes at four separate addresses
+mean the investigator node has a network route to the registry and the sanctions list and *no
+route at all* to core banking — the only server that can write anything. A bug in the
+allow-list is then a failed connection rather than an unauthorised write.
+
+Each server is given only what it needs, and nothing has a workload identity: these are
+simulated back-ends, they call no Azure service, so they get no Azure token. `document-store`
+is the only one that touches storage and it is read-only.
+
+`NetworkPolicy` would be the next step: the cluster has Cilium enabled, so restricting which
+pods may open a connection to `mcp-core-banking` is a dozen more lines. Left out here because
+it is unverified, and shipping a security control nobody has tested against is worse than
+saying it is not there yet.
+*/}}
+{{- range .Values.mcpServers }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-mcp-{{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: mcp-{{ .name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "wathiq.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: mcp-{{ .name }}
+  template:
+    metadata:
+      labels:
+        {{- include "wathiq.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: mcp-{{ .name }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mcp
+          image: {{ include "wathiq.image" (dict "root" $ "name" "wathiq-mcp") }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: ["python", "-m", "{{ .module }}"]
+          ports:
+            - name: mcp
+              containerPort: {{ .port }}
+          env:
+            - name: MCP_PORT
+              value: {{ .port | quote }}
+            # The server rejects a request whose Host header is not in this list — a DNS
+            # rebinding guard, carried over from the compose setup.
+            - name: MCP_ALLOWED_HOSTS
+              value: "{{ $.Release.Name }}-mcp-{{ .name }},localhost,127.0.0.1"
+            - name: WATHIQ_STORAGE_DIR
+              value: /storage
+          livenessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: mcp
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml $.Values.mcpResources | nindent 12 }}
+          securityContext:
+            {{- include "wathiq.securityContext" $ | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: storage
+              mountPath: /storage
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-mcp-{{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "wathiq.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: mcp-{{ .name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .port }}
+      targetPort: mcp
+      name: mcp
+  selector:
+    {{- include "wathiq.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: mcp-{{ .name }}
+{{- end }}

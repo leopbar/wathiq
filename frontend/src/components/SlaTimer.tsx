@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Clock } from "lucide-react";
 import type { SlaState } from "@/lib/types";
 import { formatCountdown, formatDateTime, msUntil } from "@/lib/format";
@@ -19,13 +20,6 @@ const DOT: Record<SlaState, string> = {
   none: "bg-border",
 };
 
-const WORD: Record<SlaState, string> = {
-  on_track: "On track",
-  at_risk: "At risk",
-  breached: "Breached",
-  none: "No SLA",
-};
-
 export function SlaTimer({
   dueAt,
   state,
@@ -35,6 +29,7 @@ export function SlaTimer({
   state: SlaState;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const [remaining, setRemaining] = useState(() => msUntil(dueAt));
 
   useEffect(() => {
@@ -45,22 +40,26 @@ export function SlaTimer({
   }, [dueAt]);
 
   if (state === "none" || remaining === null) {
-    return <span className={cn("text-small text-ink-2/70", className)}>No SLA</span>;
+    return (
+      <span className={cn("text-small text-ink-2/70", className)}>
+        {t("catalog.sla.none")}
+      </span>
+    );
   }
 
   const overdue = remaining < 0;
   const text = overdue
-    ? `${formatCountdown(remaining)} over`
-    : `${formatCountdown(remaining)} left`;
+    ? t("sla.over", { time: formatCountdown(remaining) })
+    : t("sla.left", { time: formatCountdown(remaining) });
+  const stateLabel = t(`catalog.sla.${state}`);
 
   return (
-    <Tooltip content={`${WORD[state]} · due ${formatDateTime(dueAt)}`}>
+    <Tooltip content={t("sla.due", { state: stateLabel, date: formatDateTime(dueAt) })}>
       <span
         className={cn("inline-flex items-center gap-1.5 text-small tabular", TONE[state], className)}
       >
         <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[state])} aria-hidden />
         <Clock className="h-3.5 w-3.5" aria-hidden />
-        <span className="sr-only">{WORD[state]}: </span>
         {text}
       </span>
     </Tooltip>

@@ -8,6 +8,7 @@ import {
   UserCheck,
   Zap,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { DashboardKpis, Role } from "@/lib/types";
 import { formatDuration, formatNumber, formatPercent, formatUsd } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
@@ -18,9 +19,10 @@ import { StatCardSkeleton } from "@/components/Skeletons";
 export const KPI_REGION_LABEL = "Key performance indicators";
 
 export function KpiRowSkeleton() {
+  const { t } = useTranslation();
   return (
     <section
-      aria-label={KPI_REGION_LABEL}
+      aria-label={t("dashboard.kpiRegion")}
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
     >
       {[0, 1, 2, 3, 4, 5, 6].map((i) => (
@@ -41,35 +43,36 @@ interface Kpi {
 }
 
 export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undefined }) {
+  const { t } = useTranslation();
   const all: Kpi[] = [
     {
       key: "cases_today",
-      label: "Cases today",
+      label: t("dashboard.kpis.casesToday"),
       value: formatNumber(kpis.cases_today),
       icon: FileStack,
       deltaKey: "cases_today",
-      hint: `${formatNumber(kpis.cases_total)} total`,
+      hint: t("dashboard.kpis.total", { count: formatNumber(kpis.cases_total) }),
     },
     {
       key: "straight_through_rate",
-      label: "Straight-through",
+      label: t("dashboard.kpis.straightThrough"),
       value: formatPercent(kpis.straight_through_rate, 1),
       icon: Zap,
       deltaKey: "straight_through_rate",
-      hint: "no human touched it",
+      hint: t("dashboard.kpis.noHuman"),
     },
     {
       key: "review_rate",
-      label: "Review rate",
+      label: t("dashboard.kpis.reviewRate"),
       value: formatPercent(kpis.review_rate, 1),
       icon: UserCheck,
       deltaKey: "review_rate",
       invert: true,
-      hint: "sent to a human",
+      hint: t("dashboard.kpis.sentToHuman"),
     },
     {
       key: "avg_handling_ms",
-      label: "Avg handling time",
+      label: t("dashboard.kpis.avgHandling"),
       value: formatDuration(kpis.avg_handling_ms),
       icon: Timer,
       deltaKey: "avg_handling_ms",
@@ -77,7 +80,7 @@ export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undef
     },
     {
       key: "sla_breaches",
-      label: "SLA breaches",
+      label: t("dashboard.kpis.slaBreaches"),
       value: formatNumber(kpis.sla_breaches),
       icon: AlarmClock,
       deltaKey: "sla_breaches",
@@ -85,16 +88,16 @@ export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undef
     },
     {
       key: "avg_cost_usd",
-      label: "Avg cost / case",
+      label: t("dashboard.kpis.avgCost"),
       value: formatUsd(kpis.avg_cost_usd),
       icon: CircleDollarSign,
       deltaKey: "avg_cost_usd",
       invert: true,
-      hint: "model + OCR",
+      hint: t("dashboard.kpis.modelOcr"),
     },
     {
       key: "open_reviews",
-      label: "Open reviews",
+      label: t("dashboard.kpis.openReviews"),
       value: formatNumber(kpis.open_reviews),
       icon: Inbox,
       deltaKey: "open_reviews",
@@ -114,7 +117,7 @@ export function KpiRow({ kpis, role }: { kpis: DashboardKpis; role: Role | undef
 
   return (
     <section
-      aria-label={KPI_REGION_LABEL}
+      aria-label={t("dashboard.kpiRegion")}
       className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
     >
       {ordered.map((kpi) => (

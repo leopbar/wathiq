@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   Building2,
@@ -37,23 +38,17 @@ import { Tooltip } from "@/components/ui/tooltip";
  * A demo running on the fallback must never look like one running on Conductor.
  */
 
-const KIND_LABEL: Record<string, string> = {
-  simple: "worker task",
-  human: "human task",
-  wait: "timer",
-  switch: "decision",
-  join: "join",
-  fork: "fork",
-};
+const KNOWN_KINDS = ["simple", "human", "wait", "switch", "join", "fork"];
 
 function EngineCard({ health, active }: { health: EngineHealth; active: boolean }) {
+  const { t } = useTranslation();
   const isConductor = health.engine === "conductor";
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-small font-semibold text-ink">
-            {isConductor ? "Orkes Conductor" : "In-process engine (fallback)"}
+            {isConductor ? "Orkes Conductor" : t("settings.process.fallbackEngine")}
           </p>
           {health.url ? (
             <code className="text-caption text-ink-2" dir="ltr">
@@ -62,16 +57,20 @@ function EngineCard({ health, active }: { health: EngineHealth; active: boolean 
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {active ? <Badge tone="primary">in use</Badge> : <Badge tone="outline">standby</Badge>}
+          {active ? (
+            <Badge tone="primary">{t("settings.process.inUse")}</Badge>
+          ) : (
+            <Badge tone="outline">{t("settings.process.standby")}</Badge>
+          )}
           {health.reachable ? (
             <Badge tone="success">
               <CheckCircle2 className="h-3 w-3" aria-hidden />
-              reachable
+              {t("settings.process.reachable")}
             </Badge>
           ) : (
             <Badge tone="danger">
               <XCircle className="h-3 w-3" aria-hidden />
-              not reachable
+              {t("settings.process.notReachable")}
             </Badge>
           )}
         </div>
@@ -80,8 +79,8 @@ function EngineCard({ health, active }: { health: EngineHealth; active: boolean 
       {isConductor ? (
         <p className="mt-2 text-caption text-ink-2">
           {health.workflow_registered
-            ? "The workflow definition in this repository is registered on the server."
-            : "The workflow is not registered yet. A worker registers it when it starts."}
+            ? t("settings.process.workflowRegistered")
+            : t("settings.process.workflowNotRegistered")}
         </p>
       ) : null}
     </Card>
@@ -89,29 +88,32 @@ function EngineCard({ health, active }: { health: EngineHealth; active: boolean 
 }
 
 function StepRow({ step }: { step: ProcessStepDefinition }) {
+  const { t } = useTranslation();
   return (
     <li className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-small font-medium text-ink">{step.label}</span>
-          <Badge tone="outline">{KIND_LABEL[step.kind] ?? step.kind}</Badge>
+          <Badge tone="outline">
+            {KNOWN_KINDS.includes(step.kind) ? t(`settings.process.kind.${step.kind}`) : step.kind}
+          </Badge>
           {step.queue ? (
             <code className="text-caption text-ink-2" dir="ltr">
               {step.queue}
             </code>
           ) : null}
           {step.writes_externally ? (
-            <Tooltip content="The only step that changes something outside Wathiq. It refuses without an approval and carries an idempotency key.">
+            <Tooltip content={t("settings.process.writesExternallyHint")}>
               <span className="inline-flex">
                 <Badge tone="warning">
                   <Building2 className="h-3 w-3" aria-hidden />
-                  writes externally
+                  {t("settings.process.writesExternally")}
                 </Badge>
               </span>
             </Tooltip>
           ) : null}
           {step.only_on_route ? (
-            <Badge tone="neutral">only when a human is asked</Badge>
+            <Badge tone="neutral">{t("settings.process.onlyOnRoute")}</Badge>
           ) : null}
         </div>
         <p className="mt-1 text-caption text-ink-2">{step.description}</p>
@@ -121,6 +123,7 @@ function StepRow({ step }: { step: ProcessStepDefinition }) {
 }
 
 function AuditIntegrityCard() {
+  const { t } = useTranslation();
   const query = useQuery({
     queryKey: qk.auditIntegrity,
     queryFn: () => apiFetch<AuditIntegrity>("/process/audit-integrity"),
@@ -137,25 +140,32 @@ function AuditIntegrityCard() {
 
   const report = query.data;
   return (
-    <Card className="p-4" aria-label="Audit trail integrity" role="region">
+    <Card className="p-4" aria-label={t("settings.process.auditIntegrityLabel")} role="region">
       <div className="flex flex-wrap items-center gap-2">
         <Lock className="h-4 w-4 text-ink-2" aria-hidden />
-        <span className="text-small font-semibold text-ink">Audit trail</span>
+        <span className="text-small font-semibold text-ink">
+          {t("settings.process.auditTrail")}
+        </span>
         {report.append_only_enforced ? (
-          <Badge tone="success">append-only, enforced by the database</Badge>
+          <Badge tone="success">{t("settings.process.appendOnly")}</Badge>
         ) : (
           <Badge tone="danger">
             <AlertTriangle className="h-3 w-3" aria-hidden />
-            not enforced
+            {t("settings.process.notEnforced")}
           </Badge>
         )}
-        <Badge tone="neutral">{formatNumber(report.rows)} entries</Badge>
+        <Badge tone="neutral">
+          {t("settings.process.entries", {
+            count: report.rows,
+            formatted: formatNumber(report.rows),
+          })}
+        </Badge>
       </div>
       <p className="mt-2 text-caption text-ink-2">{report.detail}</p>
       {/* The limits of the check are shown, not buried: it proves the application cannot
           rewrite the log, and it does not claim to be cryptographic proof. */}
       <p className="mt-2 text-caption text-ink-2">
-        <span className="font-medium text-ink">What this does not prove: </span>
+        <span className="font-medium text-ink">{t("settings.process.doesNotProve")} </span>
         {report.limits}
       </p>
     </Card>
@@ -163,6 +173,7 @@ function AuditIntegrityCard() {
 }
 
 export function ProcessTab() {
+  const { t } = useTranslation();
   const { role } = useAuth();
   const canSweep = role === "supervisor" || role === "admin";
   const queryClient = useQueryClient();
@@ -187,7 +198,7 @@ export function ProcessTab() {
         <ErrorState
           error={query.error}
           onRetry={() => void query.refetch()}
-          title="The process layer could not be read"
+          title={t("settings.process.loadError")}
         />
       </Card>
     );
@@ -196,33 +207,33 @@ export function ProcessTab() {
   const health = query.data;
 
   return (
-    <section aria-label="Process layer" className="space-y-4">
+    <section aria-label={t("settings.process.regionLabel")} className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <GitBranch className="h-4 w-4 text-ink-2" aria-hidden />
-          <span className="text-small font-semibold text-ink">
+          <span className="text-small font-semibold text-ink" dir="ltr">
             {health.process.workflow} v{health.process.version}
           </span>
-          <Badge tone="outline">configured: {health.configured}</Badge>
+          <Badge tone="outline">
+            {t("settings.process.configured", { engine: health.configured })}
+          </Badge>
           <Badge tone={health.active === "conductor" ? "primary" : "info"}>
-            running on: {health.active === "conductor" ? "Conductor" : "the in-process engine"}
+            {t("settings.process.runningOn", {
+              engine:
+                health.active === "conductor"
+                  ? "Conductor"
+                  : t("settings.process.inProcessEngine"),
+            })}
           </Badge>
           {health.fell_back ? (
             <Badge tone="warning">
               <AlertTriangle className="h-3 w-3" aria-hidden />
-              Conductor unreachable — using the fallback
+              {t("settings.process.fellBack")}
             </Badge>
           ) : null}
         </div>
-        <p className="mt-2 text-caption text-ink-2">
-          Conductor runs the business process and can wait days for a person. LangGraph runs the AI
-          reasoning inside one of its tasks. The Conductor workflow id is the LangGraph thread id,
-          so a single identifier ties the process, the reasoning and the audit trail together.
-        </p>
-        <p className="mt-2 text-caption text-ink-2">
-          Each case records which engine ran it, so a case processed by the fallback can never be
-          mistaken for one that went through Conductor.
-        </p>
+        <p className="mt-2 text-caption text-ink-2">{t("settings.process.twoLayers")}</p>
+        <p className="mt-2 text-caption text-ink-2">{t("settings.process.engineRecorded")}</p>
       </Card>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -237,21 +248,24 @@ export function ProcessTab() {
 
       <Card>
         <CardHeader
-          title="The workflow"
-          description="Generated from the definition in the code, so it cannot draw a process we do not run."
+          title={t("settings.process.workflowTitle")}
+          description={t("settings.process.workflowDescription")}
         />
-        <div className="p-4">
+        <div className="p-4" dir="ltr">
           <MermaidDiagram
             chart={health.process.mermaid}
-            ariaLabel="The Conductor workflow Wathiq runs for a KYC refresh"
+            ariaLabel={t("settings.process.workflowAria")}
           />
         </div>
       </Card>
 
       <Card>
         <CardHeader
-          title="Steps"
-          description={`${health.process.steps.length} steps. Worker queues: ${health.process.worker_queues.join(", ")}`}
+          title={t("settings.process.stepsTitle")}
+          description={t("settings.process.stepsDescription", {
+            count: health.process.steps.length,
+            queues: health.process.worker_queues.join(", "),
+          })}
         />
         <ul>
           {health.process.steps.map((step) => (
@@ -263,17 +277,15 @@ export function ProcessTab() {
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Timer className="h-4 w-4 text-ink-2" aria-hidden />
-          <span className="text-small font-semibold text-ink">Review SLA</span>
+          <span className="text-small font-semibold text-ink">
+            {t("settings.process.reviewSla")}
+          </span>
           <Badge tone="neutral">
             <Clock className="h-3 w-3" aria-hidden />
-            {health.process.sla_hours} hours
+            {t("settings.process.hours", { count: health.process.sla_hours })}
           </Badge>
         </div>
-        <p className="mt-2 text-caption text-ink-2">
-          The timer runs beside the human review, not after it. If it fires first, the review moves
-          to the supervisor queue and the case priority is raised — the case is never decided or
-          cancelled on a person's behalf. A review someone is already working on stays with them.
-        </p>
+        <p className="mt-2 text-caption text-ink-2">{t("settings.process.slaBody")}</p>
         {canSweep ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
@@ -281,22 +293,20 @@ export function ProcessTab() {
               onClick={() => sweep.mutate()}
               disabled={sweep.isPending}
             >
-              {sweep.isPending ? "Checking…" : "Run the SLA check now"}
+              {sweep.isPending ? t("settings.process.checking") : t("settings.process.runSweep")}
             </Button>
-            <span className="text-caption text-ink-2">
-              The same sweep the timer runs. It can only escalate a review that is already overdue.
-            </span>
+            <span className="text-caption text-ink-2">{t("settings.process.sweepNote")}</span>
             {sweep.data ? (
               <Badge tone={sweep.data.escalated > 0 ? "warning" : "success"}>
                 {sweep.data.note}
               </Badge>
             ) : null}
-            {sweep.isError ? <Badge tone="danger">The check could not be run</Badge> : null}
+            {sweep.isError ? (
+              <Badge tone="danger">{t("settings.process.sweepError")}</Badge>
+            ) : null}
           </div>
         ) : (
-          <p className="mt-3 text-caption text-ink-2">
-            Only a supervisor or an admin can run the SLA check by hand.
-          </p>
+          <p className="mt-3 text-caption text-ink-2">{t("settings.process.sweepForbidden")}</p>
         )}
       </Card>
 

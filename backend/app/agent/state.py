@@ -80,6 +80,10 @@ class DocumentState(TypedDict):
     # and markup removed, values intact. NOT the PII-tokenised copy, which exists only for
     # logs. The original stays in `ocr_text` for the reviewer.
     safe_text: NotRequired[str]
+    # Where each line sat on the page, when the OCR engine reported geometry (M6, Document
+    # Intelligence). `[{text, page, bbox, confidence}]`; empty for the demo reader. This is
+    # what lets a field carry a highlight box and its own read confidence.
+    line_boxes: NotRequired[list[dict[str, Any]]]
 
 
 class FieldState(TypedDict):
@@ -186,3 +190,7 @@ class WorkerInput(TypedDict):
     field_schema: list[dict[str, Any]]
     order_offset: int
     prompt_version: str
+    # The text of that prompt version (M6). Loaded once by the supervisor rather than by each
+    # worker, so a model-backed extractor never has to reach into the database itself. Empty
+    # in demo mode, where the extractor makes no model call and the wording cannot matter.
+    prompt_body: NotRequired[str]

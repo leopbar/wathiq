@@ -1,11 +1,12 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useTranslation } from "react-i18next";
 import type { CaseStatus, DashboardCharts } from "@/lib/types";
-import { CASE_STATUS_LABEL } from "@/lib/constants";
 import { formatNumber } from "@/lib/format";
 import { tooltipStyles } from "./ChartTooltip";
 import { useChartPalette } from "./chartTheme";
 
 export function StatusDonut({ data }: { data: DashboardCharts["status_split"] }) {
+  const { t } = useTranslation();
   const palette = useChartPalette();
   const styles = tooltipStyles(palette);
 
@@ -22,7 +23,7 @@ export function StatusDonut({ data }: { data: DashboardCharts["status_split"] })
   };
 
   const rows = data.map((d) => ({
-    name: CASE_STATUS_LABEL[d.status],
+    name: t(`catalog.caseStatus.${d.status}`),
     value: d.count,
     fill: colourFor[d.status],
   }));
@@ -52,7 +53,7 @@ export function StatusDonut({ data }: { data: DashboardCharts["status_split"] })
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-h1 font-semibold text-ink tabular">{formatNumber(total)}</span>
-          <span className="label-caption text-ink-2">cases</span>
+          <span className="label-caption text-ink-2">{t("dashboard.casesUnit")}</span>
         </div>
       </div>
       <ul className="flex-1 space-y-1.5">

@@ -13,6 +13,7 @@ import PromptStudio from "./screens/PromptStudio";
 import Settings from "./screens/Settings";
 import AuditLog from "./screens/AuditLog";
 import About from "./screens/About";
+import FailureGallery from "./screens/FailureGallery";
 import NotFound from "./screens/NotFound";
 
 const router = createBrowserRouter([
@@ -97,6 +98,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute capability="audit">
             <AuditLog />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "failures",
+        element: (
+          <ProtectedRoute capability="gallery">
+            <FailureGallery />
           </ProtectedRoute>
         ),
       },

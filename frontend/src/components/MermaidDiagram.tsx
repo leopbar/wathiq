@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import mermaid from "mermaid";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { cssVar, useTheme } from "./useTheme";
 import { ErrorState } from "./ErrorState";
@@ -17,6 +18,7 @@ export function MermaidDiagram({
   className?: string;
   ariaLabel?: string;
 }) {
+  const { t } = useTranslation();
   const { theme } = useTheme();
   const baseId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,21 +78,21 @@ export function MermaidDiagram({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Diagram could not be rendered.");
+        setError(err instanceof Error ? err.message : t("mermaid.renderError"));
         setReady(true);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [chart, theme, baseId, ariaLabel]);
+  }, [chart, theme, baseId, ariaLabel, t]);
 
   if (error) {
-    return <ErrorState error={new Error(error)} title="Diagram failed to render" />;
+    return <ErrorState error={new Error(error)} title={t("mermaid.failed")} />;
   }
 
   return (
-    <div className={cn("relative w-full overflow-x-auto scroll-thin", className)}>
+    <div dir="ltr" className={cn("relative w-full overflow-x-auto scroll-thin", className)}>
       {!ready ? <Skeleton className="h-52 w-full" /> : null}
       <div
         ref={containerRef}

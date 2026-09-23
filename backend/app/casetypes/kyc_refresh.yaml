@@ -1,0 +1,17 @@
+# Use case 1: corporate KYC refresh.
+id: kyc_refresh
+version: 1.0.0
+title_en: Corporate KYC refresh
+title_ar: تحديث بيانات اعرف عميلك للشركات
+customer_kind: corporate
+expected_documents: [trade_license, emirates_id, passport, moa]
+
+posting:
+  tool: post_kyc_refresh
+  # Part of the idempotency key. Kept as "kyc_refresh" so keys issued before profiles existed
+  # still match, and a retry of an old case can never post twice.
+  record: kyc_refresh
+
+# The KYC investigator already reconciles licence and memorandum names and checks licence
+# status by number, so no name-based registry checks are declared here.
+registry_checks: []

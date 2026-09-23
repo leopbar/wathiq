@@ -1,5 +1,5 @@
 import type { CaseStatus, Priority, RiskLevel, Severity } from "@/lib/types";
-import { CASE_STATUS_LABEL, PRIORITY_LABEL, RISK_LABEL, SEVERITY_LABEL } from "@/lib/constants";
+import { useTranslation } from "react-i18next";
 import { Badge } from "./ui/badge";
 import type { BadgeProps } from "./ui/badge";
 
@@ -28,11 +28,12 @@ const DOT: Record<Tone, string> = {
 };
 
 export function StatusPill({ status }: { status: CaseStatus }) {
+  const { t } = useTranslation();
   const tone = STATUS_TONE[status];
   return (
     <Badge tone={tone}>
       <span className={`h-1.5 w-1.5 rounded-full ${DOT[tone]}`} aria-hidden />
-      {CASE_STATUS_LABEL[status]}
+      {t(`catalog.caseStatus.${status}`)}
     </Badge>
   );
 }
@@ -44,11 +45,12 @@ const SEVERITY_TONE: Record<Severity, Tone> = {
 };
 
 export function SeverityPill({ severity }: { severity: Severity }) {
+  const { t } = useTranslation();
   const tone = SEVERITY_TONE[severity];
   return (
     <Badge tone={tone}>
       <span className={`h-1.5 w-1.5 rounded-full ${DOT[tone]}`} aria-hidden />
-      {SEVERITY_LABEL[severity]}
+      {t(`catalog.severity.${severity}`)}
     </Badge>
   );
 }
@@ -60,10 +62,11 @@ const PRIORITY_TONE: Record<Priority, Tone> = {
 };
 
 export function PriorityPill({ priority }: { priority: Priority }) {
+  const { t } = useTranslation();
   if (priority === "normal") {
-    return <span className="text-small text-ink-2">{PRIORITY_LABEL.normal}</span>;
+    return <span className="text-small text-ink-2">{t("catalog.priority.normal")}</span>;
   }
-  return <Badge tone={PRIORITY_TONE[priority]}>{PRIORITY_LABEL[priority]}</Badge>;
+  return <Badge tone={PRIORITY_TONE[priority]}>{t(`catalog.priority.${priority}`)}</Badge>;
 }
 
 const RISK_TONE: Record<RiskLevel, Tone> = {
@@ -73,5 +76,6 @@ const RISK_TONE: Record<RiskLevel, Tone> = {
 };
 
 export function RiskPill({ risk }: { risk: RiskLevel }) {
-  return <Badge tone={RISK_TONE[risk]}>{RISK_LABEL[risk]}</Badge>;
+  const { t } = useTranslation();
+  return <Badge tone={RISK_TONE[risk]}>{t(`catalog.risk.${risk}`)}</Badge>;
 }

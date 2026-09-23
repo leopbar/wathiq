@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowRight } from "lucide-react";
 import { subscribeToCaseEvents } from "@/lib/api";
 import { PIPELINE_NODES } from "@/lib/constants";
@@ -22,6 +23,7 @@ export function PipelineProgress({
   reference: string;
   threadId: string | null;
 }) {
+  const { t } = useTranslation();
   const [events, setEvents] = useState<CaseProgressEvent[]>([]);
   const [phase, setPhase] = useState<Phase>("streaming");
 
@@ -62,27 +64,27 @@ export function PipelineProgress({
       }
       return {
         key: node.key,
-        label: node.label,
-        description: node.description,
+        label: t(`pipeline.${node.key}.label`),
+        description: t(`pipeline.${node.key}.description`),
         state,
         message: event?.message,
       };
     });
-  }, [events, latest, phase]);
+  }, [events, latest, phase, t]);
 
   const parked = steps.some((step) => step.state === "waiting");
 
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        title="Pipeline"
-        description={`Live progress for ${reference}.`}
+        title={t("pipelineProgress.title")}
+        description={t("pipelineProgress.description", { reference })}
         action={
           <Link
             to={`/cases/${caseId}`}
             className={buttonVariants({ variant: "primary", size: "sm" })}
           >
-            View case
+            {t("pipelineProgress.viewCase")}
             <ArrowRight className="h-3.5 w-3.5 rtl:rotate-180" aria-hidden />
           </Link>
         }
@@ -90,31 +92,31 @@ export function PipelineProgress({
 
       <div className="space-y-4 p-5">
         <div className="flex items-center gap-3">
-          <Progress value={percent} label="Pipeline progress" className="flex-1" />
+          <Progress value={percent} label={t("pipelineProgress.progress")} className="flex-1" />
           <span className="text-small font-medium text-ink tabular">{Math.round(percent)}%</span>
         </div>
 
         <div aria-live="polite" className="sr-only">
-          {latest ? `${latest.node}: ${latest.message}` : "Waiting for the pipeline to start."}
+          {latest
+            ? `${latest.node}: ${latest.message}`
+            : t("pipelineProgress.waitingToStart")}
         </div>
 
         {phase === "error" ? (
           <p className="rounded-[var(--radius)] border border-warning/30 bg-warning-soft px-3 py-2 text-small text-warning">
-            The live stream dropped. The case keeps processing on the server — open it to see the
-            final state.
+            {t("pipelineProgress.streamDropped")}
           </p>
         ) : null}
 
         {phase === "ended" && parked ? (
           <p className="rounded-[var(--radius)] border border-warning/30 bg-warning-soft px-3 py-2 text-small text-warning">
-            The pipeline paused at the review gate and is waiting for a reviewer. Its state is
-            checkpointed, so it resumes from this exact point once someone decides.
+            {t("pipelineProgress.parked")}
           </p>
         ) : null}
 
         {phase === "ended" && events.length === 0 ? (
           <p className="rounded-[var(--radius)] border border-border bg-surface-2 px-3 py-2 text-small text-ink-2">
-            The stream closed without any progress frames. Open the case to see where it got to.
+            {t("pipelineProgress.noFrames")}
           </p>
         ) : null}
 
@@ -122,12 +124,12 @@ export function PipelineProgress({
 
         {threadId ? (
           <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-border bg-surface-2/60 px-3 py-2">
-            <Badge tone="primary">Conductor workflow / LangGraph thread</Badge>
+            <Badge tone="primary">{t("pipelineProgress.thread")}</Badge>
             <code className="truncate text-caption text-ink tabular" dir="ltr">
               {threadId}
             </code>
             <span className="ms-auto">
-              <CopyButton value={threadId} label="Copy thread id" />
+              <CopyButton value={threadId} label={t("pipelineProgress.copyThread")} />
             </span>
           </div>
         ) : null}
@@ -135,7 +137,7 @@ export function PipelineProgress({
         {events.length > 0 ? (
           <details className="rounded-[var(--radius)] border border-border">
             <summary className="cursor-pointer px-3 py-2 text-small text-ink-2 hover:text-ink">
-              Raw stream ({events.length} frames)
+              {t("pipelineProgress.rawStream", { count: events.length })}
             </summary>
             <ul className="max-h-48 space-y-1 overflow-y-auto scroll-thin border-t border-border px-3 py-2">
               {events.map((event, index) => (

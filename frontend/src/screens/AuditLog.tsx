@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Download, ScrollText } from "lucide-react";
 import { apiFetch, apiUrl, buildQuery, withToken } from "@/lib/api";
 import { qk } from "@/lib/query";
@@ -26,6 +27,7 @@ const ACTOR_TONE = {
 } as const;
 
 export default function AuditLog() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("");
@@ -78,8 +80,8 @@ export default function AuditLog() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Audit log"
-        description="An append-only record of every action: who or what did it, when, and which prompt and model version were pinned at the time."
+        title={t("nav.audit")}
+        description={t("audit.description")}
         actions={
           <a
             href={exportHref}
@@ -87,7 +89,7 @@ export default function AuditLog() {
             download
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
-            Export CSV
+            {t("common.export")}
           </a>
         }
       />
@@ -95,7 +97,7 @@ export default function AuditLog() {
       <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="xl:col-span-2">
-            <Field label="Search" htmlFor="audit-q">
+            <Field label={t("common.search")} htmlFor="audit-q">
               <SearchInput
                 id="audit-q"
                 value={search}
@@ -103,12 +105,12 @@ export default function AuditLog() {
                   setSearch(value);
                   setPage(1);
                 }}
-                placeholder="Free text across labels and references…"
-                ariaLabel="Search the audit log"
+                placeholder={t("audit.searchPlaceholder")}
+                ariaLabel={t("audit.searchLabel")}
               />
             </Field>
           </div>
-          <Field label="Actor" htmlFor="audit-actor">
+          <Field label={t("audit.actor")} htmlFor="audit-actor">
             <Input
               id="audit-actor"
               value={actor}
@@ -117,9 +119,10 @@ export default function AuditLog() {
                 setPage(1);
               }}
               placeholder="supervisor_node"
+              dir="ltr"
             />
           </Field>
-          <Field label="Action" htmlFor="audit-action">
+          <Field label={t("audit.action")} htmlFor="audit-action">
             <Input
               id="audit-action"
               value={action}
@@ -128,10 +131,11 @@ export default function AuditLog() {
                 setPage(1);
               }}
               placeholder="document.classified"
+              dir="ltr"
             />
           </Field>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="From" htmlFor="audit-from">
+            <Field label={t("audit.from")} htmlFor="audit-from">
               <Input
                 id="audit-from"
                 type="date"
@@ -142,7 +146,7 @@ export default function AuditLog() {
                 }}
               />
             </Field>
-            <Field label="To" htmlFor="audit-to">
+            <Field label={t("audit.to")} htmlFor="audit-to">
               <Input
                 id="audit-to"
                 type="date"
@@ -158,7 +162,7 @@ export default function AuditLog() {
         {hasFilters ? (
           <div className="mt-3 flex justify-end">
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("cases.clearFilters")}
             </Button>
           </div>
         ) : null}
@@ -174,16 +178,16 @@ export default function AuditLog() {
         <Card>
           <EmptyState
             icon={ScrollText}
-            title={hasFilters ? "No entries match these filters" : "The audit log is empty"}
+            title={hasFilters ? t("audit.noMatches") : t("audit.empty")}
             description={
               hasFilters
-                ? "Widen the date range or clear the actor and action filters."
-                : "Entries appear as soon as the pipeline or a reviewer acts on a case."
+                ? t("audit.noMatchesDescription")
+                : t("audit.emptyDescription")
             }
             action={
               hasFilters ? (
                 <Button variant="secondary" size="sm" onClick={clearFilters}>
-                  Clear filters
+                  {t("cases.clearFilters")}
                 </Button>
               ) : undefined
             }
@@ -193,18 +197,18 @@ export default function AuditLog() {
         <div className="rounded-[var(--radius-lg)] border border-border bg-surface">
           <TableWrap className="rounded-b-none border-0">
             <Table>
-              <caption className="sr-only">Audit entries</caption>
+              <caption className="sr-only">{t("audit.caption")}</caption>
               <thead>
                 <tr>
                   <Th className="w-8">
-                    <span className="sr-only">Expand</span>
+                    <span className="sr-only">{t("audit.expand")}</span>
                   </Th>
-                  <Th>When</Th>
-                  <Th>Actor</Th>
-                  <Th>Action</Th>
-                  <Th>Case</Th>
-                  <Th>Prompt</Th>
-                  <Th>Model</Th>
+                  <Th>{t("audit.columns.when")}</Th>
+                  <Th>{t("audit.columns.actor")}</Th>
+                  <Th>{t("audit.columns.action")}</Th>
+                  <Th>{t("audit.columns.case")}</Th>
+                  <Th>{t("audit.columns.prompt")}</Th>
+                  <Th>{t("audit.columns.model")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -217,7 +221,7 @@ export default function AuditLog() {
                           <button
                             type="button"
                             aria-expanded={open}
-                            aria-label={open ? "Hide detail" : "Show detail"}
+                            aria-label={open ? t("audit.hideDetail") : t("audit.showDetail")}
                             className="text-ink-2"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -236,24 +240,28 @@ export default function AuditLog() {
                         </Td>
                         <Td>
                           <div className="flex items-center gap-2">
-                            <Badge tone={ACTOR_TONE[entry.actor_type]}>{entry.actor_type}</Badge>
-                            <span className="truncate text-small text-ink">{entry.actor}</span>
+                            <Badge tone={ACTOR_TONE[entry.actor_type]}>{t(`audit.actorType.${entry.actor_type}`)}</Badge>
+                            <bdi className="truncate text-small text-ink">
+                              {entry.actor}
+                            </bdi>
                           </div>
                         </Td>
                         <Td>
                           <div className="min-w-0">
                             <p className="truncate text-small text-ink">{entry.label}</p>
-                            <code className="text-caption text-ink-2">{entry.action}</code>
+                            <code className="text-caption text-ink-2" dir="ltr">
+                              {entry.action}
+                            </code>
                           </div>
                         </Td>
                         <Td className="whitespace-nowrap text-small tabular">
-                          {entry.case_reference ?? "—"}
+                          <bdi>{entry.case_reference ?? "—"}</bdi>
                         </Td>
                         <Td className="whitespace-nowrap text-caption text-ink-2">
-                          {entry.prompt_version ?? "—"}
+                          <bdi>{entry.prompt_version ?? "—"}</bdi>
                         </Td>
                         <Td className="whitespace-nowrap text-caption text-ink-2">
-                          {entry.model_version ?? "—"}
+                          <bdi>{entry.model_version ?? "—"}</bdi>
                         </Td>
                       </Tr>
                       {open ? (
@@ -261,15 +269,15 @@ export default function AuditLog() {
                           <td colSpan={7} className="border-b border-border px-4 py-3">
                             <div className="flex flex-wrap gap-4">
                               <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-caption">
-                                <dt className="text-ink-2">Entry id</dt>
+                                <dt className="text-ink-2">{t("audit.entryId")}</dt>
                                 <dd className="text-ink tabular" dir="ltr">
                                   {entry.id}
                                 </dd>
-                                <dt className="text-ink-2">IP address</dt>
+                                <dt className="text-ink-2">{t("audit.ipAddress")}</dt>
                                 <dd className="text-ink tabular" dir="ltr">
                                   {entry.ip_address ?? "—"}
                                 </dd>
-                                <dt className="text-ink-2">Case id</dt>
+                                <dt className="text-ink-2">{t("audit.caseId")}</dt>
                                 <dd className="text-ink tabular" dir="ltr">
                                   {entry.case_id ?? "—"}
                                 </dd>
@@ -296,7 +304,7 @@ export default function AuditLog() {
             total={query.data.total}
             size={query.data.size}
             onPageChange={setPage}
-            label="entries"
+            label={t("audit.entriesUnit")}
           />
         </div>
       )}

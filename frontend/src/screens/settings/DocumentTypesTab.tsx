@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { FileCog, ShieldAlert } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
+import { localized } from "@/lib/format";
 import type { DocumentTypeConfig } from "@/lib/types";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,39 +13,52 @@ import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
 
 function SchemaTable({ config }: { config: DocumentTypeConfig }) {
+  const { t } = useTranslation();
   return (
     <TableWrap className="border-0">
       <Table>
-        <caption className="sr-only">Schema fields for {config.name_en}</caption>
+        <caption className="sr-only">
+          {t("settings.documentTypes.schemaCaption", {
+            name: localized(config.name_en, config.name_ar),
+          })}
+        </caption>
         <thead>
           <tr>
-            <Th>Field</Th>
-            <Th>Label (EN)</Th>
-            <Th>Label (AR)</Th>
-            <Th>Type</Th>
-            <Th>Rules</Th>
+            <Th>{t("settings.documentTypes.columns.field")}</Th>
+            <Th>{t("settings.documentTypes.columns.labelEn")}</Th>
+            <Th>{t("settings.documentTypes.columns.labelAr")}</Th>
+            <Th>{t("settings.documentTypes.columns.type")}</Th>
+            <Th>{t("settings.documentTypes.columns.rules")}</Th>
           </tr>
         </thead>
         <tbody>
           {config.fields.map((field) => (
             <Tr key={field.name}>
               <Td>
-                <code className="text-caption text-ink">{field.name}</code>
+                <code className="text-caption text-ink" dir="ltr">
+                  {field.name}
+                </code>
               </Td>
-              <Td className="text-small">{field.label_en}</Td>
+              <Td className="text-small" dir="ltr">
+                {field.label_en}
+              </Td>
               <Td className="text-small" dir="rtl">
                 {field.label_ar}
               </Td>
               <Td>
-                <Badge tone="outline">{field.type}</Badge>
+                <Badge tone="outline">
+                  <bdi>{field.type}</bdi>
+                </Badge>
               </Td>
               <Td>
                 <span className="flex flex-wrap gap-1.5">
-                  {field.required ? <Badge tone="info">required</Badge> : null}
+                  {field.required ? (
+                    <Badge tone="info">{t("settings.documentTypes.required")}</Badge>
+                  ) : null}
                   {field.is_critical ? (
                     <Badge tone="danger">
                       <ShieldAlert className="h-3 w-3" aria-hidden />
-                      critical
+                      {t("settings.documentTypes.critical")}
                     </Badge>
                   ) : null}
                 </span>
@@ -57,6 +72,8 @@ function SchemaTable({ config }: { config: DocumentTypeConfig }) {
 }
 
 export function DocumentTypesTab() {
+  const { t, i18n } = useTranslation();
+  const arabic = i18n.language.startsWith("ar");
   const query = useQuery({
     queryKey: qk.documentTypes,
     queryFn: () => apiFetch<DocumentTypeConfig[]>("/settings/document-types"),
@@ -70,35 +87,41 @@ export function DocumentTypesTab() {
     return (
       <EmptyState
         icon={FileCog}
-        title="No document types configured"
-        description="A document type is a schema, a prompt, a rule set and a golden set — nothing in the engine changes when one is added."
+        title={t("settings.documentTypes.emptyTitle")}
+        description={t("settings.documentTypes.emptyDescription")}
       />
     );
   }
 
   return (
     <div className="space-y-4 pt-4">
-      <p className="text-small text-ink-2">
-        Adding a document type is configuration only: schema, prompt, cross-field rules and a golden
-        set. The extraction engine does not change.
-      </p>
+      <p className="text-small text-ink-2">{t("settings.documentTypes.intro")}</p>
       {query.data.map((config) => (
         <Card key={config.id} className="overflow-hidden">
           <CardHeader
             title={
               <span className="flex flex-wrap items-center gap-2">
-                {config.name_en}
-                <span dir="rtl" className="text-small font-normal text-ink-2">
-                  {config.name_ar}
+                {arabic ? config.name_ar : config.name_en}
+                <span
+                  dir={arabic ? "ltr" : "rtl"}
+                  className="text-small font-normal text-ink-2"
+                >
+                  {arabic ? config.name_en : config.name_ar}
                 </span>
               </span>
             }
-            description={`${config.fields.length} fields · ${config.rules_count} cross-field rules`}
+            description={`${t("settings.documentTypes.fields", {
+              count: config.fields.length,
+            })} · ${t("settings.documentTypes.crossFieldRules", { count: config.rules_count })}`}
             action={
               <div className="flex gap-1.5">
-                <Badge tone="outline">v{config.version}</Badge>
+                <Badge tone="outline">
+                  <bdi>v{config.version}</bdi>
+                </Badge>
                 <Badge tone={config.is_active ? "success" : "neutral"}>
-                  {config.is_active ? "active" : "inactive"}
+                  {config.is_active
+                    ? t("settings.documentTypes.active")
+                    : t("settings.documentTypes.inactive")}
                 </Badge>
               </div>
             }

@@ -29,6 +29,31 @@ dependencies = [
     "pillow>=11,<13",
 ]
 
+[project.optional-dependencies]
+# The Azure SDKs are an *extra*, not a core dependency, and every one of them is imported
+# lazily inside the adapter that needs it. That is what lets `WATHIQ_MODE=demo` run on a
+# machine where none of this is installed — which is the promise M1 made and M6 has to keep.
+# The deployed image installs the extra, so one image serves both modes.
+azure = [
+    # Models and embeddings (Azure AI Foundry speaks the OpenAI protocol).
+    "openai>=1.60,<3",
+    # Managed identity / workload identity. Every adapter prefers this over a key.
+    "azure-identity>=1.19,<2",
+    # OCR with geometry and per-word confidence.
+    "azure-ai-documentintelligence>=1.0,<2",
+    # RAG over the policy pack.
+    "azure-search-documents>=11.6,<12",
+    # Document storage with a hierarchical namespace and user-delegation SAS.
+    "azure-storage-file-datalake>=12.18,<13",
+    # OpenTelemetry export to Application Insights.
+    "azure-monitor-opentelemetry>=1.6,<2",
+    # Submitting the calibration fit as a managed job.
+    "azure-ai-ml>=1.23,<2",
+    # RS256 verification of Entra tokens. PyJWT is already a core dependency, but it can only
+    # verify RSA signatures when `cryptography` is present.
+    "cryptography>=43",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -58,6 +83,12 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    # Tests that call a real Azure service. They skip themselves unless the matching endpoint
+    # is configured, so the default run — and CI — never needs a key and never spends money.
+    #   docker compose exec api pytest -m azure
+    "azure: needs live Azure services; skipped unless the endpoints are configured",
+]
 
 [build-system]
 requires = ["hatchling"]

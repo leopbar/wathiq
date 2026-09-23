@@ -11,6 +11,14 @@ value was obtained:
 | `label`    | Was it found next to its own label, or guessed from nearby text? | 0.15   |
 | `shape`    | Does it look like what the schema asks for (date, number, ...)?  | 0.20   |
 | `critic`   | Did an independent second read agree?                            | 0.20   |
+| `read`     | How sure was the OCR engine about *this value's* own characters? | 0.20   |
+
+The weights are **relative, not absolute**: `combine()` divides by the weight of the signals
+that are actually present, so a missing signal costs nothing and the six do not need to sum to
+one. `read` is the sixth, added in M6. Only Document Intelligence can answer it — it returns a
+confidence per word, so we can ask about the value rather than about the page. The demo OCR
+reads a text layer and has no per-word confidence to report, so in demo mode the signal is
+absent and the other five re-normalise to exactly what they scored before M6.
 
 The weighted average is the **raw** confidence. It is then passed through the calibration
 curve (`app.agent.calibration`) to become the **calibrated** confidence, which is the number
@@ -44,6 +52,9 @@ WEIGHTS: dict[str, float] = {
     "label": 0.15,
     "shape": 0.20,
     "critic": 0.20,
+    # M6. Absent unless Document Intelligence read the page; see the note in the module
+    # docstring about weights being relative.
+    "read": 0.20,
 }
 
 SIGNAL_LABELS: dict[str, str] = {
@@ -52,6 +63,7 @@ SIGNAL_LABELS: dict[str, str] = {
     "label": "Next to its own label",
     "shape": "Matches the expected format",
     "critic": "Second read agreed",
+    "read": "OCR was sure of these characters",
 }
 
 # Each self-correction attempt the worker needed costs a little confidence: the value is fine
@@ -175,7 +187,24 @@ def critic_signal(agreed: bool | None, detail: str = "") -> Signal | None:
                   detail or ("agreed" if agreed else "disagreed"))
 
 
-def combine(signals: list[Signal], *, self_corrections: int = 0) -> Breakdown:
+def read_signal(field_confidence: float | None) -> Signal | None:
+    """Document Intelligence's own confidence in the characters of *this value*.
+
+    `None` means no engine reported one — the demo OCR reads a text layer, where there is
+    nothing to be unsure about — and a missing signal costs the field nothing.
+
+    This is a different question from `ocr`, which is about the page as a whole. A page can
+    read cleanly overall while one smudged field on it does not, and that field is exactly the
+    one a reviewer should see.
+    """
+    if field_confidence is None:
+        return None
+    value = round(max(0.0, min(1.0, float(field_confidence))), 3)
+    return Signal("read", SIGNAL_LABELS["read"], value, WEIGHTS["read"],
+                  f"engine was {value:.0%} sure of this value")
+
+
+def combine(signals: list[Signal | None], *, self_corrections: int = 0) -> Breakdown:
     """Weighted average of the signals that exist, minus the self-correction penalty."""
     present = [signal for signal in signals if signal is not None]
     total_weight = sum(signal.weight for signal in present)

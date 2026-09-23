@@ -1,10 +1,11 @@
 import { Search, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 export function SearchInput({
   value,
   onChange,
-  placeholder = "Search…",
+  placeholder: placeholderProp,
   id,
   className,
   ariaLabel,
@@ -16,6 +17,8 @@ export function SearchInput({
   className?: string;
   ariaLabel?: string;
 }) {
+  const { t } = useTranslation();
+  const placeholder = placeholderProp ?? t("common.searchEllipsis");
   return (
     <div className={cn("relative", className)}>
       <Search
@@ -34,7 +37,7 @@ export function SearchInput({
       {value ? (
         <button
           type="button"
-          aria-label="Clear search"
+          aria-label={t("common.clearSearch")}
           onClick={() => onChange("")}
           className="absolute end-2 top-1/2 -translate-y-1/2 rounded-[var(--radius-sm)] p-1 text-ink-2 hover:bg-surface-2 hover:text-ink"
         >

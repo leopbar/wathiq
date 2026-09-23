@@ -37,6 +37,22 @@ class StorageBackend(ABC):
     def label(self) -> str:
         """How this backend is described in the UI, honestly."""
 
+    def signed_url(
+        self,
+        storage_path: str,
+        *,
+        content_type: str | None = None,
+        filename: str | None = None,
+    ) -> str | None:
+        """A URL the browser may fetch directly, or `None` if this backend cannot make one.
+
+        Not abstract: a local folder has no such thing, and the default `None` is the honest
+        answer for it. The document endpoint falls back to streaming the bytes itself, which
+        is what has happened since M1. ADLS Gen2 overrides this with a short-lived SAS. (M6)
+        """
+        del storage_path, content_type, filename
+        return None
+
 
 class LocalStorage(StorageBackend):
     def __init__(self, root: str | Path) -> None:
@@ -74,8 +90,23 @@ _backend: StorageBackend | None = None
 
 
 def get_storage() -> StorageBackend:
+    """The storage backend this deployment is configured for.
+
+    ADLS only when its account URL is set. The import is inside the branch so demo mode never
+    loads an Azure SDK.
+    """
     global _backend
     if _backend is None:
-        # AZURE mode plugs an AdlsStorage here in M6 — same interface.
-        _backend = LocalStorage(settings.storage_dir)
+        if settings.adls_enabled:
+            from app.azure.adls import AdlsStorage
+
+            _backend = AdlsStorage()
+        else:
+            _backend = LocalStorage(settings.storage_dir)
     return _backend
+
+
+def reset_storage() -> None:
+    """Drop the cached backend so a test can change the settings and pick a different one."""
+    global _backend
+    _backend = None

@@ -1,4 +1,5 @@
 import { useRef, useState, type DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, Image as ImageIcon, Paperclip, UploadCloud, X } from "lucide-react";
 import { ACCEPTED_EXTENSIONS, ACCEPTED_MIME, MAX_FILES, MAX_FILE_BYTES } from "@/lib/constants";
 import { formatBytes } from "@/lib/format";
@@ -23,19 +24,6 @@ function uniqueSuffix(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function validate(file: File, existing: PickedFile[]): string | null {
-  if (!ACCEPTED_MIME.includes(file.type as (typeof ACCEPTED_MIME)[number])) {
-    return `${file.name}: only PDF, PNG, JPEG and TIFF are accepted.`;
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    return `${file.name}: larger than ${formatBytes(MAX_FILE_BYTES)}.`;
-  }
-  if (existing.some((f) => f.file.name === file.name && f.file.size === file.size)) {
-    return `${file.name}: already added.`;
-  }
-  return null;
-}
-
 export function Dropzone({
   files,
   onChange,
@@ -45,6 +33,7 @@ export function Dropzone({
   onChange: (files: PickedFile[]) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -56,10 +45,20 @@ export function Dropzone({
 
     for (const file of Array.from(incoming)) {
       if (accepted.length >= MAX_FILES) {
-        problems.push(`Only ${MAX_FILES} documents can be uploaded at once.`);
+        problems.push(t("dropzone.tooMany", { count: MAX_FILES }));
         break;
       }
-      const problem = validate(file, accepted);
+      let problem: string | null = null;
+      if (!ACCEPTED_MIME.includes(file.type as (typeof ACCEPTED_MIME)[number])) {
+        problem = t("dropzone.invalidType", { name: file.name });
+      } else if (file.size > MAX_FILE_BYTES) {
+        problem = t("dropzone.tooLarge", {
+          name: file.name,
+          size: formatBytes(MAX_FILE_BYTES),
+        });
+      } else if (accepted.some((f) => f.file.name === file.name && f.file.size === file.size)) {
+        problem = t("dropzone.duplicate", { name: file.name });
+      }
       if (problem) {
         problems.push(problem);
         continue;
@@ -96,10 +95,9 @@ export function Dropzone({
         <span className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-surface text-primary shadow-card">
           <UploadCloud className="h-5 w-5" aria-hidden />
         </span>
-        <p className="text-body font-medium text-ink">Drag documents here</p>
+        <p className="text-body font-medium text-ink">{t("dropzone.title")}</p>
         <p className="mx-auto mt-1 max-w-sm text-small text-ink-2">
-          Trade licence, Emirates ID, passport, memorandum of association or salary certificate.
-          PDF, PNG, JPEG or TIFF up to {formatBytes(MAX_FILE_BYTES)} each.
+          {t("dropzone.description", { size: formatBytes(MAX_FILE_BYTES) })}
         </p>
         <Button
           type="button"
@@ -110,7 +108,7 @@ export function Dropzone({
           onClick={() => inputRef.current?.click()}
         >
           <Paperclip className="h-3.5 w-3.5" aria-hidden />
-          Choose files
+          {t("dropzone.choose")}
         </Button>
         <input
           ref={inputRef}
@@ -118,7 +116,7 @@ export function Dropzone({
           multiple
           accept={ACCEPTED_EXTENSIONS}
           className="sr-only"
-          aria-label="Choose documents to upload"
+          aria-label={t("dropzone.chooseLabel")}
           onChange={(e) => {
             add(e.target.files);
             e.target.value = "";
@@ -157,7 +155,7 @@ export function Dropzone({
                   variant="ghost"
                   size="iconSm"
                   disabled={disabled}
-                  aria-label={`Remove ${picked.file.name}`}
+                  aria-label={t("dropzone.remove", { name: picked.file.name })}
                   onClick={() => onChange(files.filter((f) => f.id !== picked.id))}
                 >
                   <X className="h-3.5 w-3.5" aria-hidden />

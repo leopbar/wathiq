@@ -53,9 +53,24 @@ def parse_date(text: str) -> date | None:
 
 
 class ExtractorBackend(ABC):
+    """Turning a document's lines into values.
+
+    `prompt` and `examples` were added in M6 and are keyword-only with defaults, so every
+    existing call site still works unchanged. A deterministic reader has no use for either;
+    a model-backed one needs both, and the alternative — reaching into the database from
+    inside the extractor — would put an I/O dependency in the one place that has to stay
+    pure enough to run in a test without a database.
+    """
+
     @abstractmethod
     def extract(
-        self, lines: list[str], field_schema: list[dict[str, object]], doc_type: str
+        self,
+        lines: list[str],
+        field_schema: list[dict[str, object]],
+        doc_type: str,
+        *,
+        prompt: str | None = None,
+        examples: list[dict[str, object]] | None = None,
     ) -> dict[str, ExtractedValue]: ...
 
     @property
@@ -76,8 +91,18 @@ class DemoExtractor(ExtractorBackend):
     """
 
     def extract(
-        self, lines: list[str], field_schema: list[dict[str, object]], doc_type: str
+        self,
+        lines: list[str],
+        field_schema: list[dict[str, object]],
+        doc_type: str,
+        *,
+        prompt: str | None = None,
+        examples: list[dict[str, object]] | None = None,
     ) -> dict[str, ExtractedValue]:
+        # `prompt` and `examples` are accepted and ignored: this reader matches labels and
+        # makes no model call, so wording cannot change its answer. That is the honest reason
+        # the M5 sensitivity harness reports "unsupported" in demo mode rather than a score.
+        del prompt, examples
         # Map every label spelling we know to the schema field name.
         label_to_name: dict[str, str] = {}
         for spec in field_schema:
@@ -138,8 +163,25 @@ _backend: ExtractorBackend | None = None
 
 
 def get_extractor() -> ExtractorBackend:
+    """The extractor this deployment is configured for.
+
+    Foundry only when both its endpoint and a deployment name are set. The import is inside
+    the branch so demo mode never loads an Azure SDK.
+    """
     global _backend
     if _backend is None:
-        # AZURE mode plugs FoundryExtractor here in M6 — same interface.
-        _backend = DemoExtractor()
+        from app.core.config import settings
+
+        if settings.foundry_enabled:
+            from app.azure.foundry import FoundryExtractor
+
+            _backend = FoundryExtractor()
+        else:
+            _backend = DemoExtractor()
     return _backend
+
+
+def reset_extractor() -> None:
+    """Drop the cached backend so a test can change the settings and pick a different one."""
+    global _backend
+    _backend = None

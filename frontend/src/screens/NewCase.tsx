@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Rocket } from "lucide-react";
@@ -7,10 +8,8 @@ import { apiFetch } from "@/lib/api";
 import type { CaseDetail, StartCaseResponse } from "@/lib/types";
 import {
   CASE_TYPES,
-  CASE_TYPE_LABEL,
   PIPELINE_NODES,
   PRIORITIES,
-  PRIORITY_LABEL,
 } from "@/lib/constants";
 import { describeError } from "@/components/ErrorState";
 import { PageHeader } from "@/components/PageHeader";
@@ -21,15 +20,21 @@ import { Select } from "@/components/ui/select";
 import { Dropzone, type PickedFile } from "./newcase/Dropzone";
 import { PipelineProgress } from "./newcase/PipelineProgress";
 
-const schema = z.object({
-  customer_name: z.string().trim().min(2, "Customer name is required"),
-  customer_name_ar: z.string().trim().optional(),
-  case_type: z.enum(["kyc_refresh", "salary_certificate"]),
-  priority: z.enum(["normal", "high", "urgent"]),
-  notes: z.string().trim().max(2000).optional(),
-});
+type FormValues = {
+  customer_name: string;
+  customer_name_ar?: string;
+  case_type: "kyc_refresh" | "salary_certificate";
+  priority: "normal" | "high" | "urgent";
+  notes?: string;
+};
 
-type Errors = Partial<Record<keyof z.infer<typeof schema> | "files", string>>;
+type Errors = Partial<Record<keyof FormValues | "files", string>>;
+
+/** The case-type profile the engine reads, so this screen cannot ask for the wrong documents. */
+interface CaseTypeProfile {
+  id: string;
+  expected_documents: { key: string; label_en: string; label_ar: string }[];
+}
 
 interface StartedCase {
   id: string;
@@ -38,7 +43,19 @@ interface StartedCase {
 }
 
 export default function NewCase() {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const schema = useMemo(
+    () =>
+      z.object({
+        customer_name: z.string().trim().min(2, t("newCase.errors.customerName")),
+        customer_name_ar: z.string().trim().optional(),
+        case_type: z.enum(["kyc_refresh", "salary_certificate"]),
+        priority: z.enum(["normal", "high", "urgent"]),
+        notes: z.string().trim().max(2000, t("newCase.errors.notesLength")).optional(),
+      }),
+    [t],
+  );
 
   const [customerName, setCustomerName] = useState("");
   const [customerNameAr, setCustomerNameAr] = useState("");
@@ -46,6 +63,16 @@ export default function NewCase() {
   const [priority, setPriority] = useState("normal");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
+  const profiles = useQuery({
+    queryKey: ["case-types"],
+    queryFn: () => apiFetch<CaseTypeProfile[]>("/system/case-types"),
+    staleTime: 60 * 60_000,
+  });
+  const expected = (profiles.data ?? [])
+    .find((profile) => profile.id === caseType)
+    ?.expected_documents.map((document) =>
+      i18n.language === "ar" ? document.label_ar : document.label_en,
+    );
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
@@ -79,13 +106,13 @@ export default function NewCase() {
         nextErrors[key] ??= issue.message;
       }
     }
-    if (files.length === 0) nextErrors.files = "Attach at least one document.";
+    if (files.length === 0) nextErrors.files = t("newCase.errors.files");
     setErrors(nextErrors);
     if (!parsed.success || files.length === 0) return;
 
     setBusy(true);
     try {
-      setStage("Creating case…");
+      setStage(t("newCase.stages.creating"));
       const created = await apiFetch<CaseDetail>("/cases", {
         method: "POST",
         body: JSON.stringify({
@@ -97,12 +124,12 @@ export default function NewCase() {
         }),
       });
 
-      setStage(`Uploading ${files.length} document${files.length === 1 ? "" : "s"}…`);
+      setStage(t("newCase.stages.uploading", { count: files.length }));
       const form = new FormData();
       for (const picked of files) form.append("files", picked.file, picked.file.name);
       await apiFetch(`/cases/${created.id}/documents`, { method: "POST", body: form });
 
-      setStage("Starting the pipeline…");
+      setStage(t("newCase.stages.starting"));
       const startResponse = await apiFetch<StartCaseResponse>(`/cases/${created.id}/start`, {
         method: "POST",
       });
@@ -113,10 +140,12 @@ export default function NewCase() {
         threadId: startResponse.thread_id ?? created.thread_id ?? null,
       });
       void queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast.success("Case started", { description: `${created.reference} is now processing.` });
+      toast.success(t("newCase.started"), {
+        description: t("newCase.startedDescription", { reference: created.reference }),
+      });
     } catch (error) {
       const message = describeError(error).message;
-      toast.error("Could not start the case", { description: message });
+      toast.error(t("newCase.startError"), { description: message });
       setErrors({ files: message });
     } finally {
       setBusy(false);
@@ -127,12 +156,12 @@ export default function NewCase() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="New case"
-        description="Create a customer case, attach the document package, and watch the agent pipeline run it end to end."
+        title={t("newCase.title")}
+        description={t("newCase.description")}
         actions={
           started ? (
             <Button variant="secondary" size="sm" onClick={reset}>
-              Start another case
+              {t("newCase.startAnother")}
             </Button>
           ) : null
         }
@@ -141,19 +170,20 @@ export default function NewCase() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
         <Card>
           <CardHeader
-            title="Case details"
-            description="Synthetic customers only — this environment never holds real records."
+            title={t("newCase.caseDetails")}
+            description={t("newCase.syntheticOnly")}
           />
           <form onSubmit={(e) => void submit(e)} noValidate className="space-y-5 p-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
-                label="Customer name (English)"
+                label={t("newCase.customerNameEn")}
                 htmlFor="customer_name"
                 required
                 error={errors.customer_name}
               >
                 <Input
                   id="customer_name"
+                  dir="ltr"
                   value={customerName}
                   disabled={busy || Boolean(started)}
                   onChange={(e) => setCustomerName(e.target.value)}
@@ -163,9 +193,9 @@ export default function NewCase() {
               </Field>
 
               <Field
-                label="Customer name (Arabic)"
+                label={t("newCase.customerNameAr")}
                 htmlFor="customer_name_ar"
-                hint="Optional — used for the bilingual cross-check."
+                hint={t("newCase.customerNameArHint")}
                 error={errors.customer_name_ar}
               >
                 <Input
@@ -178,31 +208,37 @@ export default function NewCase() {
                 />
               </Field>
 
-              <Field label="Case type" htmlFor="case_type" required>
+              <Field label={t("newCase.caseType")} htmlFor="case_type" required>
                 <Select
                   id="case_type"
                   value={caseType}
                   onValueChange={setCaseType}
                   disabled={busy || Boolean(started)}
-                  options={CASE_TYPES.map((t) => ({ value: t, label: CASE_TYPE_LABEL[t] }))}
+                  options={CASE_TYPES.map((caseTypeKey) => ({
+                    value: caseTypeKey,
+                    label: t(`catalog.caseType.${caseTypeKey}`),
+                  }))}
                 />
               </Field>
 
-              <Field label="Priority" htmlFor="priority" required>
+              <Field label={t("newCase.priority")} htmlFor="priority" required>
                 <Select
                   id="priority"
                   value={priority}
                   onValueChange={setPriority}
                   disabled={busy || Boolean(started)}
-                  options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))}
+                  options={PRIORITIES.map((p) => ({
+                    value: p,
+                    label: t(`catalog.priority.${p}`),
+                  }))}
                 />
               </Field>
             </div>
 
             <Field
-              label="Notes for the reviewer"
+              label={t("newCase.notes")}
               htmlFor="notes"
-              hint="Anything a human should know before deciding."
+              hint={t("newCase.notesHint")}
               error={errors.notes}
             >
               <Textarea
@@ -210,17 +246,24 @@ export default function NewCase() {
                 value={notes}
                 disabled={busy || Boolean(started)}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Renewal after a change of shareholders; trade licence was reissued last month."
+                placeholder={t("newCase.notesPlaceholder")}
               />
             </Field>
 
             <div className="space-y-1.5">
               <p className="text-small font-medium text-ink">
-                Documents
+                {t("newCase.documents")}
                 <span className="text-danger" aria-hidden>
                   {" "}
                   *
                 </span>
+              </p>
+              <p className="text-caption text-ink-2">
+                {expected?.length
+                  ? t("newCase.expected", {
+                      documents: expected.join(i18n.language === "ar" ? "، " : ", "),
+                    })
+                  : t("newCase.expectedUnknown")}
               </p>
               <Dropzone files={files} onChange={setFiles} disabled={busy || Boolean(started)} />
               {errors.files ? (
@@ -238,7 +281,7 @@ export default function NewCase() {
                 disabled={Boolean(started)}
               >
                 <Rocket className="h-4 w-4" aria-hidden />
-                Create and start
+                {t("newCase.createAndStart")}
               </Button>
               {stage ? (
                 <span className="text-small text-ink-2" aria-live="polite">
@@ -258,8 +301,8 @@ export default function NewCase() {
         ) : (
           <Card className="h-fit">
             <CardHeader
-              title="What happens next"
-              description={`The same ${PIPELINE_NODES.length} steps run for every case.`}
+              title={t("newCase.whatNext")}
+              description={t("newCase.whatNextDescription", { count: PIPELINE_NODES.length })}
             />
             {/* Driven by PIPELINE_NODES, so this list cannot describe a pipeline we do not run. */}
             <ol className="space-y-3 p-5">
@@ -269,8 +312,12 @@ export default function NewCase() {
                     {index + 1}
                   </span>
                   <div>
-                    <p className="text-small font-medium text-ink">{node.label}</p>
-                    <p className="text-caption text-ink-2">{node.description}</p>
+                    <p className="text-small font-medium text-ink">
+                      {t(`pipeline.${node.key}.label`)}
+                    </p>
+                    <p className="text-caption text-ink-2">
+                      {t(`pipeline.${node.key}.description`)}
+                    </p>
                   </div>
                 </li>
               ))}

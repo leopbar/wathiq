@@ -25,6 +25,30 @@ _STREAM = re.compile(rb"stream\r?\n(.*?)\r?\nendstream", re.DOTALL)
 
 
 @dataclass(slots=True)
+class LineBox:
+    """Where one line sits on its page, and how sure the engine was of it.
+
+    `bbox` is normalised `[x, y, w, h]` in 0..1, so the UI can overlay it on a render of any
+    size — which is the form `ExtractedField.bbox` has stored since M1 and the form
+    `DocumentViewer.tsx` already draws. Only an engine that reports geometry fills this in.
+    """
+
+    text: str
+    page: int
+    bbox: list[float]
+    confidence: float | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """Plain JSON: this travels through the LangGraph state and gets checkpointed."""
+        return {
+            "text": self.text,
+            "page": self.page,
+            "bbox": self.bbox,
+            "confidence": self.confidence,
+        }
+
+
+@dataclass(slots=True)
 class OcrResult:
     text: str
     confidence: float
@@ -32,6 +56,14 @@ class OcrResult:
     language: str = "en"
     lines: list[str] = field(default_factory=list)
     engine: str = "demo"
+    # Geometry, when the engine reports it. Empty for the demo reader: a PDF text layer has
+    # no per-line confidence, and inventing coordinates for it would put a highlight box on a
+    # reviewer's screen that nothing measured. The UI keeps saying "no source region" instead.
+    line_boxes: list[LineBox] = field(default_factory=list)
+
+    @property
+    def has_geometry(self) -> bool:
+        return bool(self.line_boxes)
 
 
 def _decode_stream(raw: bytes) -> bytes:
@@ -114,15 +146,41 @@ _backend: OcrBackend | None = None
 
 
 def get_ocr() -> OcrBackend:
+    """The OCR backend this deployment is configured for.
+
+    Document Intelligence only when its own endpoint is set, which is what makes
+    `WATHIQ_MODE=azure` with no OCR endpoint a legitimate state rather than a broken one. The
+    import is inside the branch so demo mode never loads an Azure SDK.
+    """
     global _backend
     if _backend is None:
-        # AZURE mode plugs DocumentIntelligenceOcr here in M6 — same interface.
-        _backend = DemoOcr()
+        from app.core.config import settings
+
+        if settings.doc_intelligence_enabled:
+            from app.azure.doc_intelligence import DocumentIntelligenceOcr
+
+            _backend = DocumentIntelligenceOcr()
+        else:
+            _backend = DemoOcr()
     return _backend
+
+
+def reset_ocr() -> None:
+    """Drop the cached backend so a test can change the settings and pick a different one."""
+    global _backend
+    _backend = None
 
 
 def ocr_label() -> str:
     return get_ocr().label
 
 
-__all__ = ["DemoOcr", "OcrBackend", "OcrResult", "get_ocr", "ocr_label"]
+__all__ = [
+    "DemoOcr",
+    "LineBox",
+    "OcrBackend",
+    "OcrResult",
+    "get_ocr",
+    "ocr_label",
+    "reset_ocr",
+]

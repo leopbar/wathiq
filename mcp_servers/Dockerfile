@@ -14,13 +14,11 @@ RUN groupadd --gid 1001 wathiq && useradd --uid 1001 --gid 1001 --create-home wa
 # ---------- dependency layers (cached on pyproject/uv.lock only) ----------
 FROM base AS deps-prod
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
 FROM base AS deps-dev
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project
 
 # ---------- runtime: what the four services run ----------
 FROM deps-prod AS runtime

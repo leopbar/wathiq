@@ -129,8 +129,32 @@ _backend: Embedder | None = None
 
 
 def get_embedder() -> Embedder:
+    """The embedder this deployment is configured for.
+
+    Azure only when an embedding deployment is named, which is separate from the chat
+    deployment: running a real extractor against the hashed lexical index is a legitimate
+    intermediate state, and this is what makes it expressible. The import is inside the branch
+    so demo mode never loads an Azure SDK.
+    """
     global _backend
     if _backend is None:
-        # AZURE mode plugs AzureOpenAIEmbedder here in M6 — same interface, bigger vectors.
-        _backend = HashingEmbedder()
+        from app.core.config import settings
+
+        if settings.foundry_enabled and settings.azure_openai_embedding_deployment.strip():
+            from app.azure.foundry import FoundryEmbedder
+
+            _backend = FoundryEmbedder()
+        else:
+            _backend = HashingEmbedder()
     return _backend
+
+
+def reset_embedder() -> None:
+    """Drop the cached backend so a test can change the settings and pick a different one.
+
+    Note for anyone switching embedders in a running system: the stored vectors were produced
+    by whichever embedder was active when the index was built, and vectors from two different
+    models are not comparable. Changing this means re-running `rag.index.rebuild()`.
+    """
+    global _backend
+    _backend = None

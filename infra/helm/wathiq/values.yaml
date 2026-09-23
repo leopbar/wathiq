@@ -1,0 +1,195 @@
+# Wathiq — Helm values.
+#
+# The Azure-specific values below are written by `infra/scripts/deploy.sh` from the Bicep
+# outputs, into `values.azure.yaml`. Nothing here is a secret: every secret is mounted from
+# Key Vault by the CSI driver (see templates/secretprovider.yaml), and the only two that exist
+# are the database password and the JWT signing key.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  # Set by deploy.sh to the ACR login server, e.g. wathiqcrabc123.azurecr.io
+  registry: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# ---------------------------------------------------------------- application
+wathiq:
+  # demo | azure. `azure` alone changes nothing: each service below is switched on by its own
+  # endpoint being set, exactly as in compose. An empty endpoint means the demo implementation
+  # keeps running and the UI says so.
+  mode: azure
+
+  # demo | entra
+  authBackend: demo
+
+  environment: dev
+  logLevel: INFO
+
+  # auto | conductor | inprocess.
+  #
+  # `inprocess` on a one-node cluster. Conductor wants ~2 GiB to itself, which is half the
+  # node. The in-process engine implements the same ProcessEngine interface and runs the same
+  # step functions, so the workflow is identical — it just has no separate orchestrator UI.
+  # Switch to `conductor` after adding a second node.
+  processEngine: inprocess
+
+  reviewSlaHours: 4
+
+# ---------------------------------------------------------------- azure
+azure:
+  # Written by deploy.sh from the Bicep outputs.
+  openAiEndpoint: ""
+  openAiDeployment: ""
+  openAiEmbeddingDeployment: ""
+  docIntelligenceEndpoint: ""
+  contentSafetyEndpoint: ""
+  searchEndpoint: ""
+  searchIndex: "wathiq-policies"
+  storageAccountUrl: ""
+  storageFilesystem: "documents"
+  monitorConnectionString: ""
+  mlWorkspace: ""
+  mlResourceGroup: ""
+  mlSubscriptionId: ""
+
+  entra:
+    tenantId: ""
+    clientId: ""
+
+# ---------------------------------------------------------------- identity
+workloadIdentity:
+  enabled: true
+  # The user-assigned identity's client id, from the Bicep output. The service account carries
+  # it, the pods inherit it, and every Azure adapter authenticates with it instead of a key.
+  clientId: ""
+
+serviceAccount:
+  # Must match the federated credential subject in modules/identity.bicep:
+  #   system:serviceaccount:wathiq:wathiq
+  name: wathiq
+
+keyVault:
+  enabled: true
+  name: ""
+  tenantId: ""
+  # The only two secrets that exist. Everything else authenticates with the workload identity.
+  secrets:
+    - postgres-password
+    - jwt-secret
+
+# ---------------------------------------------------------------- database
+postgres:
+  host: ""
+  port: 5432
+  database: "wathiq"
+  user: "wathiq"
+  sslMode: "require"
+
+# ---------------------------------------------------------------- workloads
+#
+# Requests and limits are set on every container. On a 4 GiB node with ~1 GiB taken by system
+# pods, the totals below come to about 1.2 GiB of requests, which fits with room to spare.
+# Requests are what the scheduler packs against; limits are what stops one pod taking the node
+# down with it.
+
+api:
+  replicas: 1
+  port: 8000
+  resources:
+    requests:
+      cpu: 150m
+      memory: 384Mi
+    limits:
+      cpu: 800m
+      memory: 768Mi
+
+worker:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+web:
+  replicas: 1
+  port: 8080
+  image:
+    # Optional component override for UI-only releases. Empty inherits image.tag.
+    tag: ""
+  # Match backend WATHIQ_MAX_UPLOAD_MB (25 MB by default).
+  maxUploadSize: 25m
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  tls:
+    # Enable a Caddy sidecar to obtain and renew a public ACME certificate. The Service maps
+    # public 80/443 to Caddy's non-privileged 8081/8443 ports; nginx remains private to the pod.
+    enabled: false
+    hostname: ""
+    image: "caddy:2.10.2-alpine"
+    storageSize: 1Gi
+
+# The four tool servers. Each is its own Deployment and its own Service, so the allow-list in
+# the agent is backed by there being no route at all to a server a node may not call.
+mcpServers:
+  - name: document-store
+    module: wathiq_mcp.document_store
+    port: 9101
+  - name: company-registry
+    module: wathiq_mcp.company_registry
+    port: 9102
+  - name: sanctions
+    module: wathiq_mcp.sanctions
+    port: 9103
+  - name: core-banking
+    module: wathiq_mcp.core_banking
+    port: 9104
+
+mcpResources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 192Mi
+
+# ---------------------------------------------------------------- ingress
+ingress:
+  # Off by default: a LoadBalancer Service for the web front end is enough for a demo and
+  # costs nothing extra beyond the public IP. Turn this on with a real host and certificate.
+  enabled: false
+  className: "webapprouting.kubernetes.azure.com"
+  host: ""
+  tls:
+    enabled: false
+    secretName: ""
+
+service:
+  # LoadBalancer gives the demo a public IP to open. ClusterIP + port-forward also works and
+  # exposes nothing.
+  type: LoadBalancer
+  # AKS publishes <label>.<region>.cloudapp.azure.com for the Service public IP. It must be
+  # unique in the Azure region and should match web.tls.hostname when TLS is enabled.
+  azureDnsLabel: ""
+
+# ---------------------------------------------------------------- database migration
+migration:
+  # Runs exactly one `alembic upgrade head` Job per release revision. API and worker init
+  # containers wait read-only for it to finish, and deploy.sh uses Helm's --wait-for-jobs.
+  enabled: true
+  backoffLimit: 3
+
+# ---------------------------------------------------------------- seeding
+seed:
+  # Loads the synthetic demo data. Safe to leave on: the seeder is idempotent and does nothing
+  # when the database already has data.
+  enabled: true

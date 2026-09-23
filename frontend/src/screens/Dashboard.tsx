@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, FilePlus2, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
 import type { DashboardCharts, DashboardKpis } from "@/lib/types";
-import { ROLE_LABEL } from "@/lib/constants";
 import { formatNumber } from "@/lib/format";
 import { useAuth } from "@/auth/useAuth";
 import { can } from "@/auth/roles";
@@ -57,7 +57,14 @@ function ChartCard({
 }
 
 export default function Dashboard() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const firstName = user
+    ? (i18n.language.startsWith("ar") && user.full_name_ar
+        ? user.full_name_ar
+        : user.full_name
+      ).split(" ")[0]
+    : t("dashboard.there");
 
   const kpis = useQuery({
     queryKey: qk.kpis,
@@ -76,19 +83,19 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Good to see you, ${user?.full_name.split(" ")[0] ?? "there"}`}
-        description="Operational health of the document pipeline — volumes, confidence, handling time and the findings that drive review."
+        title={t("dashboard.greeting", { name: firstName })}
+        description={t("dashboard.description")}
         actions={
           <>
-            {user ? <Badge tone="primary">{ROLE_LABEL[user.role]}</Badge> : null}
+            {user ? <Badge tone="primary">{t(`roles.${user.role}`)}</Badge> : null}
             <Button variant="secondary" size="sm" onClick={refreshAll}>
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Refresh
+              {t("common.refresh")}
             </Button>
             {can(user?.role, "case.create") ? (
               <Link to="/cases/new" className={buttonVariants({ variant: "primary", size: "sm" })}>
                 <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
-                New case
+                {t("nav.newCase")}
               </Link>
             ) : null}
           </>
@@ -102,7 +109,7 @@ export default function Dashboard() {
           <ErrorState
             error={kpis.error}
             onRetry={() => void kpis.refetch()}
-            title="KPIs could not be loaded"
+            title={t("dashboard.kpiError")}
           />
         </Card>
       ) : (
@@ -114,8 +121,8 @@ export default function Dashboard() {
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <ChartCard
-            title="Case volume"
-            description="Straight-through versus human-reviewed, by day."
+            title={t("dashboard.caseVolume")}
+            description={t("dashboard.caseVolumeDescription")}
             isPending={charts.isPending}
             isError={charts.isError}
             error={charts.error}
@@ -124,14 +131,17 @@ export default function Dashboard() {
             {charts.data && charts.data.volume_by_day.length > 0 ? (
               <VolumeChart data={charts.data.volume_by_day} />
             ) : (
-              <EmptyState title="No volume yet" description="Cases will appear here once processed." />
+              <EmptyState
+                title={t("dashboard.noVolume")}
+                description={t("dashboard.noVolumeDescription")}
+              />
             )}
           </ChartCard>
         </div>
 
         <ChartCard
-          title="Status split"
-          description="Where every case currently sits."
+          title={t("dashboard.statusSplit")}
+          description={t("dashboard.statusSplitDescription")}
           isPending={charts.isPending}
           isError={charts.isError}
           error={charts.error}
@@ -140,13 +150,13 @@ export default function Dashboard() {
           {charts.data && charts.data.status_split.length > 0 ? (
             <StatusDonut data={charts.data.status_split} />
           ) : (
-            <EmptyState title="No cases yet" />
+            <EmptyState title={t("dashboard.noCases")} />
           )}
         </ChartCard>
 
         <ChartCard
-          title="Field confidence"
-          description="Calibrated confidence across extracted fields."
+          title={t("dashboard.fieldConfidence")}
+          description={t("dashboard.fieldConfidenceDescription")}
           height={240}
           isPending={charts.isPending}
           isError={charts.isError}
@@ -156,13 +166,13 @@ export default function Dashboard() {
           {charts.data && charts.data.confidence_histogram.length > 0 ? (
             <ConfidenceHistogram data={charts.data.confidence_histogram} />
           ) : (
-            <EmptyState title="No extractions yet" />
+            <EmptyState title={t("dashboard.noExtractions")} />
           )}
         </ChartCard>
 
         <ChartCard
-          title="Handling time"
-          description="p50 and p90 end-to-end, by day."
+          title={t("dashboard.handlingTime")}
+          description={t("dashboard.handlingTimeDescription")}
           height={240}
           isPending={charts.isPending}
           isError={charts.isError}
@@ -172,18 +182,21 @@ export default function Dashboard() {
           {charts.data && charts.data.handling_time_by_day.length > 0 ? (
             <HandlingTimeChart data={charts.data.handling_time_by_day} />
           ) : (
-            <EmptyState title="No timings yet" />
+            <EmptyState title={t("dashboard.noTimings")} />
           )}
         </ChartCard>
 
         <Card className="overflow-hidden">
-          <CardHeader title="Top findings" description="What sends cases to a human most often." />
+          <CardHeader
+            title={t("dashboard.topFindings")}
+            description={t("dashboard.topFindingsDescription")}
+          />
           {charts.isPending ? (
             <ChartSkeleton height={240} />
           ) : charts.isError ? (
             <ErrorState error={charts.error} onRetry={() => void charts.refetch()} />
           ) : charts.data.top_findings.length === 0 ? (
-            <EmptyState title="No findings recorded" />
+            <EmptyState title={t("dashboard.noFindings")} />
           ) : (
             <ul className="divide-y divide-border">
               {charts.data.top_findings.slice(0, 6).map((finding) => (

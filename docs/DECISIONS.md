@@ -371,7 +371,7 @@ process — it is the same steps with a different scheduler. Every case records 
 a case processed by the fallback can never be mistaken for one that went through Conductor, and the
 Settings screen says plainly when `auto` had to fall back.
 **Not chosen:** making Conductor mandatory (the demo stops working on a tired laptop), or dropping
-Conductor and only ever claiming to use it (dishonest, and it is named in the job description).
+Conductor and only ever claiming to use it (dishonest: the process layer is designed around it).
 
 ### 47. A decision goes back to the engine that started the case
 **Why:** A case can sit at the human step for hours. In that time the API may have restarted, or
@@ -488,3 +488,186 @@ cases from positive ground truth, and say these are training diagnostics. Record
 attempt, even refusals, and keep database/memory activation consistent. MLflow receives aggregate
 metrics via REST; its absence never prevents fitting. It runs on loopback port 5001 under the ml
 profile so it does not compete with Conductor's UI port.
+
+## M6 — Azure mode
+
+### 63. Managed identity first; an API key is the exception, not the default
+**Why:** Every adapter calls `credential_for(key, service)`, which returns a key only when one is
+configured and otherwise the shared `DefaultAzureCredential`. On AKS that resolves to a workload
+identity: the pod trades its Kubernetes service-account token for an Entra token. The payoff is
+countable — the whole deployed system holds exactly **two** secrets, the database password and the
+JWT signing key, and both come from Key Vault through the CSI driver. There is no key for Foundry,
+Document Intelligence, Content Safety, Storage, Search or Azure ML anywhere: not in the image, not
+in a manifest, not in the repository. A key is still supported because a developer testing against
+a real service from their laptop has no managed identity to use.
+
+### 64. A configured service that fails is an error, never a quiet fallback to demo
+**Why:** The tempting behaviour is to catch the exception and fall back to the demo reader, so the
+case keeps moving. That would be the worst outcome available: the case would look normal, carry
+confident-looking numbers, and have been read by something nobody chose. "Not configured" and
+"configured and broken" are different states and are treated differently — the first is a normal
+deployment shape that the Settings screen names, the second raises. Content Safety is the one
+deliberate exception, and even there the result is a recorded third state ("unavailable"), not a
+silent pass.
+
+### 65. `prebuilt-layout`, not `prebuilt-document` — our schema stays the contract
+**Why:** `prebuilt-document` returns key-value pairs the service inferred. Taking them would put a
+second, unversioned schema in the middle of a system whose field names are configuration, whose
+rule packs are written against those names, and whose prompt versions are pinned per document type.
+We ask for words, lines, polygons and confidences, and do the field mapping ourselves against the
+schema we version.
+
+### 66. The model's answer is grounded against the document, not self-reported
+**Why:** It is easy to ask a model to return the source line beside each value. It is also
+worthless: a model that invents a value will invent a citation for it. So `FoundryExtractor` asks
+only for values and then looks each one up in the document's own lines. A value that is found
+carries the line it came from, which feeds the label signal; a value that is not found carries
+nothing, the grounding signal collapses to zero, and the field goes to a person. The difference is
+between a system that reports a hallucination and one that launders it.
+
+### 67. Both detectors run, and either one flagging is enough
+**Why:** Azure Prompt Shields does not replace the local pattern set, it joins it. Two detectors
+with different failure modes catch more than the better one alone, and the local one keeps working
+when the service is unreachable. The combination is a logical OR, not an average and not a vote,
+because these detect a deliberate attack: a miss costs far more than a false alarm, and a false
+alarm costs one extra pair of human eyes on a KYC file.
+
+### 68. `httpx` for Content Safety rather than the Content Safety SDK
+**Why:** Prompt Shields moves between preview API versions faster than the SDK follows, and `httpx`
+is already a dependency with the async client the rest of the app uses. Two small, explicit POST
+bodies are easier to read — and to fake in a test — than a wrapper whose model classes change shape
+between releases. The API version is pinned in code, so a guardrail's behaviour cannot change
+without a code review.
+
+### 69. Document links are short-lived, user-delegation SAS URLs
+**Why:** The viewer is an `<iframe>`, and an iframe cannot send an `Authorization` header — which is
+why M1 added a `?token=` query parameter to the local file endpoint. In Azure mode the browser
+fetches from storage directly with a SAS generated per request, after the API has already
+authorised the user. Fifteen minutes: long enough to read a document, short enough that a URL in a
+browser history is useless by the time anyone finds it. The signature uses a **user delegation
+key**, which Entra issues and expires, so it is traceable to the identity that asked for it —
+unlike an account-key signature, which is anonymous and valid until the key is rotated.
+
+### 70. Hybrid search, not pure vector
+**Why:** A policy lookup often contains an exact token — a citation, a licence type, a rule code —
+and pure vector search is precisely the thing that loses exact tokens. Keyword search alone misses
+"lapsed" against "expired". Azure AI Search fuses both, so they cover each other's failure. The
+score it returns from a hybrid query is a fused rank, **not** a cosine similarity, so the adapter
+recomputes the cosine against the stored vector rather than comparing a rank score against a
+similarity threshold and getting nonsense.
+
+### 71. The AI Search adapter is written and tested, and deliberately not deployed
+**Why:** A free AI Search service is one per subscription, and this subscription's belongs to
+another system. Deploying Wathiq's own would mean paying about USD 74/month for a Basic service to
+replace a pgvector retriever that already returns real policy citations. `deployAiSearch` is
+`false`, the pgvector retriever stays the default, and `app/azure/search.py` exists behind the flag.
+The honest claim is "the adapter is written and tested; I chose not to pay for a second search
+service", which is a better engineering answer than either pretending or deleting the code.
+
+### 72. Azure embeddings ask for 256 dimensions to fit the column that already exists
+**Why:** `policy_chunks.embedding` is `vector(256)` and a 1536-number vector does not fit in it.
+The obvious response is a migration; the better one is that `text-embedding-3-*` can return a
+shortened vector on request, so we ask for exactly 256 and the Azure embedder drops into the
+existing schema with no migration and no second column. A truncated vector is no longer unit
+length, so it is renormalised — without that, every similarity in the system would read low, and
+`cosine()` is a plain dot product precisely because it assumes unit vectors. Switching embedders is
+still a re-index: vectors from two different models are not comparable, which is why the embedder
+version is recorded per chunk.
+
+### 73. Entra is the authority on roles; the local row is a cache
+**Why:** The app role in the token wins over whatever the database says, and it is rewritten on
+every sign-in. That keeps "remove the app role in Entra" working as a way to take access away,
+which is the reason a bank wants Entra in front of this at all. A user who has been granted a role
+and never signed in is created on the spot, with an unusable password hash so the account cannot
+also be reached by the local password path. A token carrying no recognised Wathiq role is
+**refused**, not given the lowest role: silently downgrading would turn a misconfigured app
+registration into a person quietly holding permissions nobody granted.
+
+### 74. The calibration fit runs as an Azure ML job for provenance, not for speed
+**Why:** The fit is ninety lines of gradient descent that takes milliseconds; submitting it to a
+cluster is slower, and that is fine, because speed was never the point. A managed job records the
+code, the environment, the inputs, an owner and a run id — so "which curve is in production and
+what was it fitted on" stops being answered from memory. The job runs `app/quality/fit_job.py`,
+which calls the *same* `calibration.fit()` the in-process path calls: two implementations of a
+calibration curve is two curves. The "do no harm" guard is applied to the remote result as well,
+so a fit that scores worse than the raw confidence is discarded wherever it was computed.
+
+### 75. Tracing is additional to the audit trail, not a replacement for it
+**Why:** They answer different questions. The append-only event log in PostgreSQL answers "what
+happened to *this case*, and who did it" — that is what an auditor reads, and it is inside the
+bank. Traces answer "why was this slow, which tool call hung, how often does the critic disagree
+*across all cases*". Both exist. What crosses the boundary is constrained: spans carry ids, verdicts
+and counts, never document text or field values, because a trace leaves the building and the
+guardrails layer produces a tokenised `log_text` that is the only text allowed near a log.
+`span()` is a no-op context manager when tracing is off, so no call site has to ask.
+
+### 76. PostgreSQL is reachable from Azure, and that is stated rather than hidden
+**Why:** The demo's database is protected by a password and TLS, with a firewall rule allowing
+Azure services. A bank deployment puts it behind a private endpoint in a VNet the cluster joins,
+with no public path at all. That is a network design rather than a line of Bicep, and it is out of
+scope here — so it is named in `infra/README.md` under "What this is not", beside the two other
+gaps (no NetworkPolicy, Key Vault purge protection off so the demo can be torn down). A demo that
+claims to be production-ready is worse than one that does not.
+
+### 77. The deployment's safety rule is enforced by scope, not by care
+**Why:** This subscription holds a working system in `filingsiq-rg`. "Be careful not to touch it"
+is not a control. Three things make it one: `main.bicep` deploys at **resource-group scope**, so it
+cannot reach outside the group it is given; `deploy.sh` and `teardown.sh` check the group name
+against an exact-match allow-list; and `teardown.sh` additionally requires the tags Bicep stamps on
+the group and makes the operator type the name back. Wathiq also creates its own copy of every
+service rather than reusing one, so nothing is shared and nothing can be broken by sharing. The
+guards are tested: pointing teardown at `filingsiq-rg` is refused at the first check.
+
+### 78. Wathiq's model deployments sit on quota pools the existing system does not use
+**Why:** Azure OpenAI capacity is granted per subscription, per region, per model, per SKU — not per
+account. So a *second account* is harmless, but a deployment drawing on a pool something else
+depends on can throttle it. The existing system uses `gpt-4o` Standard and `text-embedding-3-small`
+GlobalStandard. Wathiq therefore deploys `gpt-4.1-mini` Standard and `text-embedding-3-small`
+**Standard** — different pools, measured as empty before deploying. This is invisible coupling: it
+does not appear in any template, in any resource graph, or in a code review. It is recorded in
+`modules/openai.bicep` next to the parameters that would break it.
+
+### 79. Quality Lab diagnostics never inherit deployment providers
+**Why:** The Quality Lab and CI share a reproducible synthetic suite. Resolving `get_ocr()` and
+`get_extractor()` inside that suite worked in demo mode but, in Azure, issued dozens of synchronous
+Document Intelligence and Foundry calls from one browser request. The results stopped being
+reproducible, the run consumed real quota, and Document Intelligence eventually throttled it with
+HTTP 429. The suite now injects `DemoOcr` and `DemoExtractor` explicitly. Live-provider health and
+contract checks remain separate, opt-in Azure smoke tests; a diagnostic regression run and a cloud
+availability test are different claims and must not be conflated.
+
+### 80. A case type is a profile file, and the engine reads it
+**Why:** Use case 2 was meant to arrive "by configuration only", but three things still depended
+on the case type in code: which core-banking tool posts the result, whose file it goes to, and
+which outside checks the investigator runs. Salary cases were in fact being posted as *KYC
+refreshes* to a company file. Each case type now has a YAML profile in `app/casetypes/` naming its
+expected documents, its posting tool and record, the fields the record requires, and its registry
+checks. The posting step and the investigator read the profile and never name a use case. The
+KYC profile keeps the record name `kyc_refresh`, so idempotency keys issued before profiles
+existed still match and an old case can never post twice.
+**Not chosen:** an `if case_type == ...` in the posting step (the second use case would need
+code, and so would the third), or a database table (a change to where money-relevant data is
+written should be a reviewed diff, like the rule packs — see #36).
+
+### 81. The system of record checks the kind of file, not only the approval
+**Why:** An income verification belongs on a person's file and a KYC refresh on a company's. The
+simulated core-banking server now refuses a record on the wrong kind of file, and an income record
+with no employer or total salary. Wathiq checks the required fields first and records a skip with
+the reason; the server's refusal is the second lock, recorded as a failed posting. The same
+"enforced twice, recorded always" shape as the idempotency key (#50).
+
+### 82. The employer check is declared, not coded per use case
+**Why:** A salary is only evidence if the employer is a real, trading company. The salary profile
+declares `registry_checks: salary_certificate.employer_name`; the investigator turns each declared
+check into a question and answers it with the registry's new read-only `verify_employer` tool,
+which the investigator's allowlist gains and nothing else does. A missing or non-trading employer
+is a critical finding and a review, and "could not check" stays a third outcome, never a pass.
+
+### 83. The failure-mode gallery runs through the ordinary intake, and a test runs every entry
+**Why:** A gallery that says "this is what happens when..." is a claim. Runnable entries carry
+synthetic documents; the browser downloads them and creates, uploads and starts the case through
+the same endpoints a person uses, so there is no demo-only path. `test_failure_gallery.py` runs
+every runnable entry through the real pipeline and checks the promised status and finding codes;
+entries that cannot be staged by clicking (a crash, a retry, a server going away) name the tests
+that stage them, and a test checks those tests exist. If the system changes, the gallery fails
+in CI rather than drifting into fiction.

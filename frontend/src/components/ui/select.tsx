@@ -1,5 +1,6 @@
 import { Select as RadixSelect } from "radix-ui";
 import { Check, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 export interface SelectOption {
@@ -12,7 +13,7 @@ export function Select({
   value,
   onValueChange,
   options,
-  placeholder = "Select…",
+  placeholder: placeholderProp,
   id,
   className,
   ariaLabel,
@@ -27,6 +28,8 @@ export function Select({
   ariaLabel?: string;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
+  const placeholder = placeholderProp ?? t("common.selectEllipsis");
   return (
     <RadixSelect.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <RadixSelect.Trigger

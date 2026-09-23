@@ -97,7 +97,36 @@ class TestCompanyRegistry:
 
     async def test_it_exposes_no_tool_that_writes(self) -> None:
         names = await tool_names(company_registry.server)
-        assert names == {"lookup_by_license", "search_by_name", "reconcile_names"}
+        assert names == {
+            "lookup_by_license",
+            "search_by_name",
+            "reconcile_names",
+            "verify_employer",
+        }
+
+    async def test_an_employer_is_verified_by_an_alias(self) -> None:
+        """Salary certificates use everyday spellings; the registry knows the aliases."""
+        answer = await call(
+            company_registry.server, "verify_employer", name="Falcon Ridge Trading L.L.C."
+        )
+        assert answer["found"] is True
+        assert answer["active"] is True
+        assert answer["registered_name"] == "Falcon Ridge Trading LLC"
+        assert answer["simulated"] is True
+
+    async def test_an_employer_that_is_not_trading_is_not_active(self) -> None:
+        answer = await call(
+            company_registry.server, "verify_employer", name="Sahara Green Contracting"
+        )
+        assert answer["found"] is True
+        assert answer["active"] is False
+        assert answer["status"] == "suspended"
+
+    async def test_an_unknown_employer_is_not_found_rather_than_guessed(self) -> None:
+        answer = await call(
+            company_registry.server, "verify_employer", name="Imaginary Widgets Company"
+        )
+        assert answer["found"] is False
 
 
 class TestSanctions:
@@ -223,6 +252,75 @@ class TestCoreBanking:
         read = await call(core_banking.server, "get_posting", reference=posted["reference"])
         assert read["found"] is True
         assert read["posting"]["case_id"] == "c2"
+
+
+class TestIncomeVerification:
+    """Use case 2's posting tool: the same rules as a KYC refresh, plus two of its own."""
+
+    async def test_an_income_is_posted_to_a_persons_file(self) -> None:
+        answer = await call(
+            core_banking.server,
+            "post_income_verification",
+            case_id="s1",
+            customer_id="SIM-CUS-200001",
+            idempotency_key="inc-1",
+            approved_by="Layla Haddad",
+            fields={"employer_name": "Falcon Ridge Trading LLC", "total_salary": "AED 26,400"},
+        )
+        assert answer["posted"] is True
+        assert answer["reference"].startswith("SIM-INC-")
+        assert answer["record_kind"] == "income_verification"
+
+    async def test_an_income_is_never_written_to_a_company_file(self) -> None:
+        answer = await call(
+            core_banking.server,
+            "post_income_verification",
+            case_id="s2",
+            customer_id="SIM-CUS-100001",
+            idempotency_key="inc-2",
+            approved_by="Layla Haddad",
+            fields={"employer_name": "Falcon Ridge Trading LLC", "total_salary": "AED 26,400"},
+        )
+        assert answer["posted"] is False
+        assert "Corporate" in answer["error"]
+
+    async def test_a_kyc_refresh_is_never_written_to_a_persons_file(self) -> None:
+        answer = await call(
+            core_banking.server,
+            "post_kyc_refresh",
+            case_id="s3",
+            customer_id="SIM-CUS-200002",
+            idempotency_key="inc-3",
+            approved_by="Layla Haddad",
+        )
+        assert answer["posted"] is False
+        assert "Retail" in answer["error"]
+
+    async def test_an_income_record_without_an_income_is_refused(self) -> None:
+        answer = await call(
+            core_banking.server,
+            "post_income_verification",
+            case_id="s4",
+            customer_id="SIM-CUS-200001",
+            idempotency_key="inc-4",
+            approved_by="Layla Haddad",
+            fields={"employer_name": "Falcon Ridge Trading LLC"},
+        )
+        assert answer["posted"] is False
+        assert "total_salary" in answer["error"]
+
+    async def test_the_same_key_twice_posts_once(self) -> None:
+        kwargs = {
+            "case_id": "s5",
+            "customer_id": "SIM-CUS-200003",
+            "idempotency_key": "inc-5",
+            "approved_by": "Layla Haddad",
+            "fields": {"employer_name": "Oasis Medical Supplies", "total_salary": "AED 30,000"},
+        }
+        first = await call(core_banking.server, "post_income_verification", **kwargs)
+        second = await call(core_banking.server, "post_income_verification", **kwargs)
+        assert second["duplicate"] is True
+        assert first["reference"] == second["reference"]
 
 
 class TestDocumentStore:

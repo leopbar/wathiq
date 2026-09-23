@@ -24,15 +24,22 @@ export function applyLang(lang: AppLang): void {
   }
 }
 
+const initialLanguage = readStoredLang();
+applyLang(initialLanguage);
+
 void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
     ar: { translation: ar },
   },
-  lng: readStoredLang(),
+  lng: initialLanguage,
   fallbackLng: "en",
   interpolation: { escapeValue: false },
   returnNull: false,
+});
+
+i18n.on("languageChanged", (language) => {
+  applyLang(language.startsWith("ar") ? "ar" : "en");
 });
 
 export default i18n;

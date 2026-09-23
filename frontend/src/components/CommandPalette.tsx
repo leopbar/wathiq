@@ -69,7 +69,7 @@ export function CommandPalette({
       id: `case:${c.id}`,
       label: c.reference,
       hint: c.customer_name,
-      group: "Cases",
+      group: t("nav.cases"),
       to: `/cases/${c.id}`,
     }));
 
@@ -115,7 +115,7 @@ export function CommandPalette({
         >
           <RadixDialog.Title className="sr-only">{t("common.commandPalette")}</RadixDialog.Title>
           <RadixDialog.Description className="sr-only">
-            Jump to a screen or open a case by reference.
+            {t("commandPalette.description")}
           </RadixDialog.Description>
           <div className="flex items-center gap-2 border-b border-border px-4">
             <Search className="h-4 w-4 shrink-0 text-ink-2" aria-hidden />

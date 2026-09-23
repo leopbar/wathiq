@@ -20,10 +20,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # `--config` points at .gitleaks.toml, which extends the default rules rather than
+      # replacing them and allowlists only exact, named values — the Azure built-in role
+      # definition GUIDs, which are public, identical in every tenant, and grant nothing on
+      # their own. No file or rule is exempted wholesale.
+      # The image is pinned: `latest` changed its built-in allowlist under us once already.
       - name: Run gitleaks in Docker
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:latest \
-            detect --source=/repo --redact --no-banner --verbose
+          docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+            --redact --no-banner --verbose
+
+      # The allowlist must not have blinded the scanner: a planted key has to still be caught.
+      # The canary is random on every run. A published example key (such as AWS's documentation
+      # key) is on gitleaks' own allowlist and is never flagged. Only the canary file is scanned,
+      # so a finding here cannot come from anywhere else in the repository.
+      - name: The scanner must still catch a real secret
+        run: |
+          token="ghp_$(head -c 200 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 36)"
+          printf 'GITHUB_TOKEN=%s\n' "$token" > canary-secret.env
+          if docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 \
+               detect --source=/repo/canary-secret.env --config=/repo/.gitleaks.toml \
+               --no-git --redact --no-banner; then
+            rm -f canary-secret.env
+            echo "::error::gitleaks did not flag a planted secret - the config is too permissive"
+            exit 1
+          fi
+          rm -f canary-secret.env
+          echo "gitleaks correctly flagged the planted secret"
 
   backend:
     name: Backend (ruff + pytest)
@@ -92,6 +116,53 @@ jobs:
 
       - name: Lint
         run: docker compose run --rm --no-deps --entrypoint npm web run lint
+
+  infra:
+    name: Infrastructure (Bicep + Helm + shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Compiling the Bicep catches a bad property or a wrong API version here rather than
+      # halfway through a deployment, after a resource group has already been created.
+      - name: Compile the Bicep
+        run: az bicep build --file infra/bicep/main.bicep --stdout > /dev/null
+
+      - name: Fail on any Bicep warning
+        run: |
+          # `az bicep build` exits 0 with warnings, so the warnings have to be inspected.
+          # A warning here is usually a real mistake: a property the resource type does not
+          # have, or a conditional module accessed without `!`.
+          az bicep build --file infra/bicep/main.bicep --stdout 2> bicep.err > /dev/null
+          if grep -q "Warning" bicep.err; then
+            echo "::error::Bicep produced warnings:"; cat bicep.err; exit 1
+          fi
+          echo "Bicep compiled with no warnings"
+
+      - name: Lint the Helm chart
+        run: |
+          docker run --rm -v "$PWD/infra/helm:/charts" alpine/helm:3.16.2 lint /charts/wathiq             --set image.registry=ci.azurecr.io             --set workloadIdentity.clientId=00000000-0000-0000-0000-000000000000             --set keyVault.name=ci-kv --set keyVault.tenantId=ci-tenant             --set postgres.host=ci.postgres.database.azure.com
+
+      # Rendering and validating catches a manifest that Helm is happy with and Kubernetes is
+      # not — a misspelled field, a wrong apiVersion, a probe in the wrong place.
+      - name: Render and validate the manifests
+        run: |
+          docker run --rm -v "$PWD/infra/helm:/charts" alpine/helm:3.16.2 template wathiq /charts/wathiq             --set image.registry=ci.azurecr.io             --set workloadIdentity.clientId=00000000-0000-0000-0000-000000000000             --set keyVault.name=ci-kv --set keyVault.tenantId=ci-tenant             --set postgres.host=ci.postgres.database.azure.com > rendered.yaml
+          docker run --rm -i ghcr.io/yannh/kubeconform:latest             -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 < rendered.yaml
+
+      # A CRLF in these is a broken container, and it never shows up on Windows.
+      - name: Shellcheck the deploy and teardown scripts
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo koalaman/shellcheck:stable             infra/scripts/deploy.sh infra/teardown/teardown.sh
+
+      # The teardown's guards are the thing standing between a typo and someone else's
+      # resource group. They are asserted here, not just reviewed.
+      - name: The teardown must refuse a group that is not its own
+        run: |
+          if bash infra/teardown/teardown.sh some-other-rg --yes 2>/dev/null; then
+            echo "::error::teardown accepted a resource group not on its allow-list"; exit 1
+          fi
+          echo "teardown correctly refused a group outside its allow-list"
 
   e2e:
     name: End-to-end (Playwright)

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { SortableTh, Table, TableWrap, Td, Th, Tr } from "./ui/table";
 import { TableSkeleton } from "./Skeletons";
@@ -51,6 +52,7 @@ export function DataTable<T>({
   footer,
   cardTitle,
 }: DataTableProps<T>) {
+  const { t } = useTranslation();
   if (isPending) return <TableSkeleton cols={Math.min(columns.length, 7)} />;
 
   if (isError) {
@@ -64,7 +66,7 @@ export function DataTable<T>({
   if (rows.length === 0) {
     return (
       <TableWrap>
-        {empty ?? <EmptyState title="Nothing to show" description="No records match this view." />}
+        {empty ?? <EmptyState title={t("common.nothingToShow")} description={t("common.noRecords")} />}
       </TableWrap>
     );
   }

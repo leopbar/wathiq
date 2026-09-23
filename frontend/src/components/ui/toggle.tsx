@@ -56,7 +56,7 @@ export function Switch({
         disabled={disabled}
         className="relative h-5 w-9 rounded-full border border-border bg-surface-2 transition-colors data-[state=checked]:border-primary data-[state=checked]:bg-primary disabled:opacity-50"
       >
-        <RadixSwitch.Thumb className="block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-ink-2 transition-transform data-[state=checked]:translate-x-[1.125rem] data-[state=checked]:bg-primary-ink" />
+        <RadixSwitch.Thumb className="block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-ink-2 transition-transform rtl:-translate-x-0.5 data-[state=checked]:translate-x-[1.125rem] rtl:data-[state=checked]:-translate-x-[1.125rem] data-[state=checked]:bg-primary-ink" />
       </RadixSwitch.Root>
       <label htmlFor={id} className="cursor-pointer text-small text-ink">
         {label}

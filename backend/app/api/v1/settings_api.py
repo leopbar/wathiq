@@ -11,6 +11,8 @@ from app import guardrails
 from app.agent import confidence, graph, rulepacks
 from app.agent import rules as rule_engine
 from app.agent.tools import describe_servers
+from app.azure import describe_azure_services
+from app.azure.credentials import describe_credential
 from app.core.config import settings as app_settings
 from app.core.deps import ADMIN_ONLY, CurrentUser, DbSession, require_roles
 from app.db import models
@@ -19,6 +21,8 @@ from app.rag.embedder import get_embedder
 from app.schemas.auth import UserOut
 from app.schemas.settings import (
     AssuranceInfo,
+    AzureInfo,
+    AzureServiceOut,
     DocumentTypeOut,
     GuardrailOut,
     Integration,
@@ -42,11 +46,36 @@ async def mode() -> ModeInfo:
         version=app_settings.app_version,
         build_sha=app_settings.build_sha,
         features={
-            "demo_login": app_settings.is_demo,
-            "azure_services": not app_settings.is_demo,
+            "demo_login": app_settings.auth_backend == "demo",
+            # True only when at least one Azure service is genuinely configured. `not is_demo`
+            # would have claimed the feature for a deployment that has the mode set and no
+            # endpoints, which is a real and perfectly normal state.
+            "azure_services": any(
+                bool(service["enabled"]) for service in describe_azure_services()
+            ),
+            "entra_sign_in": app_settings.entra_enabled,
             "arabic_ui": True,
             "conductor_process_layer": True,
         },
+    )
+
+
+@router.get("/azure", response_model=AzureInfo)
+async def azure_info(_: CurrentUser) -> AzureInfo:
+    """Which Azure services this deployment is actually using, service by service.
+
+    Generated from the running configuration, exactly like the Assurance and Process tabs.
+    A service that is not configured is reported as off, together with what is running in its
+    place — so the screen cannot imply a capability the deployment does not have.
+    """
+    from app.azure import monitor
+
+    return AzureInfo(
+        mode=app_settings.mode,
+        auth_backend=app_settings.auth_backend,
+        services=[AzureServiceOut(**service) for service in describe_azure_services()],
+        credential=describe_credential(app_settings.azure_openai_api_key),
+        tracing_enabled=monitor.enabled(),
     )
 
 

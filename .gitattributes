@@ -1,0 +1,37 @@
+# Line endings.
+#
+# Windows checkouts turn LF into CRLF by default, which is harmless for most files and fatal
+# for a few: a shell script with CRLF fails inside a container with `bad interpreter`, and a
+# Dockerfile entrypoint with CRLF fails the same way. These are forced to LF on disk no matter
+# which platform checks them out.
+
+* text=auto eol=lf
+
+# Executed inside Linux containers — CRLF here is a broken build, not a cosmetic difference.
+*.sh             text eol=lf
+Dockerfile       text eol=lf
+*.Dockerfile     text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Kubernetes, Helm and Bicep are consumed by Linux tooling too.
+*.yaml           text eol=lf
+*.yml            text eol=lf
+*.tpl            text eol=lf
+*.bicep          text eol=lf
+*.bicepparam     text eol=lf
+
+# Binary: never normalise, never diff as text.
+*.png            binary
+*.jpg            binary
+*.jpeg           binary
+*.gif            binary
+*.ico            binary
+*.pdf            binary
+*.woff           binary
+*.woff2          binary
+*.ttf            binary
+*.zip            binary
+
+# Generated and checked in. Marking it means a lockfile change does not drown a review.
+backend/uv.lock          linguist-generated=true
+frontend/package-lock.json linguist-generated=true

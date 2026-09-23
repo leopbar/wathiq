@@ -1,0 +1,26 @@
+apiVersion: v2
+name: wathiq
+description: |
+  Wathiq — assurance-first intelligent document processing for UAE banking operations.
+  Deploys the API, web front end and four MCP tool servers, plus the process worker when
+  Conductor is selected.
+type: application
+
+# The chart's own version. Bumped when the templates change.
+version: 0.6.0
+
+# The application version. Tracks the milestone: M6 is the Azure one.
+appVersion: "0.6.0"
+
+keywords:
+  - kyc
+  - document-processing
+  - langgraph
+  - conductor
+
+annotations:
+  # The four MCP servers are separate Deployments on purpose, not four threads in the API.
+  # That is what makes least privilege real: the investigator pod has a network address for
+  # the registry and the sanctions list, and no address at all for core banking — which is the
+  # only server that can write anything.
+  wathiq.io/least-privilege: "one deployment per MCP tool server"

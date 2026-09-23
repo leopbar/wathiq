@@ -3,11 +3,11 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { AlertCircle, BadgeCheck, FileSearch, ScrollText } from "lucide-react";
+import { AlertCircle, BadgeCheck, FileSearch, Info, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query";
-import type { DemoUser, Role } from "@/lib/types";
+import type { AuthConfig, DemoUser, Role } from "@/lib/types";
 import { useAuth } from "@/auth/useAuth";
 import { describeError } from "@/components/ErrorState";
 import { BrandMark } from "@/components/BrandMark";
@@ -42,6 +42,16 @@ export default function Login() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
+
+  // Which sign-in methods this deployment offers. Unauthenticated on purpose — the login
+  // screen has to read it before anyone has signed in. It carries no secret: a tenant id and
+  // a client id are public identifiers that appear in the address bar during any OIDC flow.
+  const authConfig = useQuery({
+    queryKey: qk.authConfig,
+    queryFn: () => apiFetch<AuthConfig>("/auth/config"),
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
 
   const demoUsers = useQuery({
     queryKey: qk.demoUsers,
@@ -90,13 +100,13 @@ export default function Login() {
     } catch (error) {
       const message = describeError(error).message;
       setFormError(message);
-      toast.error("Demo sign-in failed", { description: message });
+      toast.error(t("login.demoFailed"), { description: message });
     } finally {
       setPendingRole(null);
     }
   };
 
-  // Azure mode returns [] (or 404s the endpoint) — hide the section entirely.
+  // Entra auth returns an empty list — hide the local one-click section entirely.
   const showDemo = demoUsers.isPending || (demoUsers.data?.length ?? 0) > 0;
 
   return (
@@ -194,6 +204,42 @@ export default function Login() {
                 {t("login.submit")}
               </Button>
             </form>
+
+            {authConfig.data?.entra.enabled ? (
+              <section className="mt-8" aria-labelledby="entra-heading">
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  <h2 id="entra-heading" className="label-caption text-ink-2">
+                    Microsoft Entra ID
+                  </h2>
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                </div>
+                <div className="rounded-[var(--radius)] border border-info/30 bg-info-soft px-3 py-2.5">
+                  <p className="flex items-start gap-2 text-small text-ink">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
+                    <span>
+                      This deployment validates Microsoft Entra ID tokens. The API accepts one
+                      now — send it as a bearer token, and the app role in the token decides
+                      your Wathiq role.
+                    </span>
+                  </p>
+                  {/*
+                    Deliberately not a "Sign in with Microsoft" button.
+
+                    The browser redirect flow needs an Entra app registration with this origin
+                    as a redirect URI, which this demo does not have — so a button here would
+                    start something that cannot finish. The token validation behind it is real
+                    and tested (tests/test_azure.py); the browser leg is the part that is not,
+                    and saying so is better than a control that fails when pressed.
+                  */}
+                  <p className="mt-2 text-caption leading-4 text-ink-2">
+                    Browser sign-in needs an app registration with this origin as a redirect
+                    URI. Tenant{" "}
+                    <code className="text-ink-2/80">{authConfig.data.entra.tenant_id}</code>.
+                  </p>
+                </div>
+              </section>
+            ) : null}
 
             {showDemo ? (
               <section className="mt-8" aria-labelledby="demo-heading">
