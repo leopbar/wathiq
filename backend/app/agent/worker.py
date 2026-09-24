@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 import time
+import unicodedata
 from typing import Any
 
 from app.agent import confidence as confidence_signals
@@ -42,7 +43,10 @@ _NORMALISE = re.compile(r"[^\w]+")
 
 
 def _key(text: str) -> str:
-    return _NORMALISE.sub(" ", text.lower()).strip()
+    # NFKC folds Arabic presentation forms (the shaped glyph codes a PDF text layer often
+    # carries) back to the letters the schema's labels are written with. Without it, an Arabic
+    # label in the document never matches the same label in the configuration.
+    return _NORMALISE.sub(" ", unicodedata.normalize("NFKC", text).lower()).strip()
 
 
 def _label_keys(spec: dict[str, Any]) -> set[str]:

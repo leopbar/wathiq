@@ -37,6 +37,10 @@ class ExtractedFieldOut(Schema):
     label_en: str
     label_ar: str
     value: str | None
+    # English shown beside an Arabic value. `translation_source` is "glossary", "model" or ""
+    # when there is none, so the screen can say where the reading came from.
+    value_translated: str | None = None
+    translation_source: str = ""
     corrected_value: str | None
     confidence: float
     calibrated_confidence: float

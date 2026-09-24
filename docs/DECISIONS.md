@@ -671,3 +671,33 @@ every runnable entry through the real pipeline and checks the promised status an
 entries that cannot be staged by clicking (a crash, a retry, a server going away) name the tests
 that stage them, and a test checks those tests exist. If the system changes, the gallery fails
 in CI rather than drifting into fiction.
+
+### 84. A document is classified in Arabic as well as English, and spellings are folded
+**Why:** The first real Arabic trade licence put through this system scored **zero** and was
+marked unknown, so no schema applied and no field was extracted. The classifier only knew
+English phrases. It now carries Arabic keywords beside the English ones, and both sides are
+normalised before matching: vowel marks and the tatweel are dropped, the four forms of alef and
+the two of yeh and teh marbuta are folded, and NFKC converts the Arabic *presentation forms* a
+PDF text layer often holds back into letters. Presentation forms are the trap: they render
+identically and match nothing, so the failure is silent. A camel-cased filename
+(`tradeLicenseFake.jpg`) is also split into words now — weak evidence, but it was scoring none.
+**Not chosen:** asking a model to classify. It would work, and it may still be the answer for
+documents in a language nobody listed, but it costs a call per document and hides the reason
+behind a decision a reviewer may have to question. The docstring that claimed Azure mode
+already did this was wrong and has been corrected — there is no model-based classifier.
+
+### 85. A translation is shown beside the value, never instead of it in the record
+**Why:** An Arabic value is correct and unreadable to an English-speaking reviewer. But the
+extracted value is **evidence**: it is what the document says, what the audit trail keeps, and
+what the posting step sends to core banking. So the translation lives in its own column
+(`value_translated`), with `translation_source` recording whether a glossary or the model
+produced it — "a dictionary said so" and "a model said so" are different claims and a reviewer
+is entitled to know which. On screen in English the translation is shown first with the
+document's own words beneath it, and on the review screen the correction box always holds the
+original, because that is what a correction saves.
+**How it is produced:** the model in Azure mode, in **one call per case** rather than one per
+field, with answers matched back **by index** — a model that drops an item must not shift every
+later translation onto the wrong field. Demo mode uses an offline glossary of standard UAE
+terms and returns nothing for a phrase it does not know, rather than guessing. Names are
+transliterated, not translated; numbers, dates, licence numbers and IBANs are never touched.
+A translation failure is logged and costs a reading aid, never a case.

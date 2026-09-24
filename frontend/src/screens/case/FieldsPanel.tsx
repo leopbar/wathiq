@@ -1,4 +1,4 @@
-import { AlertCircle, Crosshair, ShieldAlert } from "lucide-react";
+import { AlertCircle, Crosshair, Languages, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Document, ExtractedField, FieldStatus } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -64,6 +64,10 @@ export function FieldsPanel({
             {group.fields.map((field) => {
               const active = field.id === selectedFieldId;
               const value = field.corrected_value ?? field.value;
+              // A translation is a reading aid, so it leads only when the reader cannot read
+              // the original — and the document's own words always stay on screen beneath it.
+              const translated =
+                !arabic && !field.corrected_value ? field.value_translated : null;
               return (
                 <li key={field.id}>
                   <button
@@ -102,8 +106,20 @@ export function FieldsPanel({
                         value ? "text-ink" : "text-ink-2 italic",
                       )}
                     >
-                      {value ? <bdi>{value}</bdi> : t("caseDetail.fields.notFound")}
+                      {translated ? (
+                        <bdi>{translated}</bdi>
+                      ) : value ? (
+                        <bdi>{value}</bdi>
+                      ) : (
+                        t("caseDetail.fields.notFound")
+                      )}
                     </p>
+
+                    {translated && value ? (
+                      <p className="mt-0.5 break-words text-caption text-ink-2" dir="rtl">
+                        <bdi>{value}</bdi>
+                      </p>
+                    ) : null}
 
                     {field.corrected_value && field.value ? (
                       <p className="mt-0.5 text-caption text-ink-2 line-through">
@@ -124,6 +140,16 @@ export function FieldsPanel({
                           {t("caseDetail.fields.noSourceRegion")}
                         </Badge>
                       )}
+                      {translated ? (
+                        <Tooltip content={t("caseDetail.fields.translationHint")}>
+                          <Badge tone="outline">
+                            <Languages className="h-3 w-3" aria-hidden />
+                            {t(`caseDetail.fields.translatedBy.${field.translation_source}`, {
+                              defaultValue: t("caseDetail.fields.translatedBy.model"),
+                            })}
+                          </Badge>
+                        </Tooltip>
+                      ) : null}
                       <code className="text-caption text-ink-2/80" dir="ltr">
                         {field.name}
                       </code>

@@ -41,6 +41,7 @@ from app.agent.extractor import get_extractor
 from app.agent.ocr import get_ocr
 from app.agent.state import CaseState, DocumentState, FieldState, FindingState, WorkerInput
 from app.agent.tools import ToolBroker
+from app.agent.translate import get_translator, translate_values
 from app.agent.worker import extract_document
 from app.casetypes import profile_for
 from app.db import models
@@ -667,11 +668,33 @@ async def validate_node(state: CaseState) -> dict[str, Any]:
             ):
                 reasons.append({"code": "CROSS_DOC_MISMATCH", "label": outcome.message})
 
+    # --- reading aid: the English of an Arabic value, beside it and never over it ---
+    # One call for the whole case, and only for values that actually contain Arabic. A failure
+    # here costs a convenience, not a case: `translate_values` returns "no translation".
+    fields_in = list(state.get("fields", []))
+    translations = translate_values([field.get("value") for field in fields_in])
+    translated_count = sum(1 for item in translations if item.text)
+    fields_in = [
+        {**field, "value_translated": item.text, "translation_source": item.source}
+        for field, item in zip(fields_in, translations, strict=False)
+    ]
+    if translated_count:
+        await _emit(
+            state["case_id"],
+            "agent.translate",
+            f"{translated_count} value(s) shown in English beside the original",
+            detail={
+                "translated": translated_count,
+                "source": get_translator().name,
+                "note": "A translation is a reading aid; the stored value is the document's.",
+            },
+        )
+
     # --- calibration: raw score in, calibrated probability out ---
     curve = calibration.active()
     calibrated_fields: list[FieldState] = [
         {**field, "calibrated_confidence": curve.apply(float(field.get("confidence", 0.0)))}
-        for field in state.get("fields", [])
+        for field in fields_in
     ]
 
     # Low confidence on a critical field is the other route into review. The *calibrated*

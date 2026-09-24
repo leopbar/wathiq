@@ -7,7 +7,7 @@ approval; M6 (Azure mode) is committed at `0683dfc` on the same branch. M7 finis
 Arabic/RTL interface across every screen, made the second use case configuration-driven through
 case-type profiles, and added the failure-mode gallery, the README screenshots and the demo script.
 
-**Verified:** 326 backend tests, 34 MCP, 44 Playwright (plus an opt-in screenshot spec); ruff,
+**Verified:** 351 backend tests, 34 MCP, 44 Playwright (plus an opt-in screenshot spec); ruff,
 eslint, tsc and the production
 build clean. Bicep compiles with zero warnings; the default in-process Helm release renders 16
 resources (15 schema-valid, 1 CRD supplied by the AKS add-on); shellcheck clean. A test proves
@@ -18,12 +18,15 @@ Wathiq never touches it — resource-group scope, an exact-match allow-list in b
 copy of every service, and model SKUs chosen against *measured* quota so they draw on pools the
 existing system does not use. The teardown guard is tested against `filingsiq-rg` and refuses it.
 
-**Live now:** `rg-wathiq-dev` is deployed on AKS. Public login, a complete real-Azure case
-(`WTQ-2026-0031`), checkpoint assurance, and an ADLS SAS document fetch all passed. The resource
-group remains intentionally live because development is continuing in Azure.
+**Azure: torn down on 2026-09-23.** `rg-wathiq-dev` was deployed on AKS and verified end to end
+(public login, real-Azure cases, checkpoint assurance, ADLS SAS fetch, Arabic classification and
+model translation). It was then deleted with the guarded teardown script, and its soft-deleted Key
+Vault and three AI accounts were purged so the names are free for a redeploy. No Wathiq resource
+remains in the subscription; `filingsiq-rg` was not touched. Redeploy with
+`./infra/scripts/deploy.sh rg-wathiq-dev eastus2` when a cloud demo is needed.
 
 **Remaining:** commit, push and the M6+M7 pull request, all of which need the user's approval.
-Azure teardown is deferred until development in Azure finishes.
+A code review on 2026-09-23 found issues to fix first; see "Review findings" under M7.
 
 **Two things deliberately not claimed.** Azure AI Search is written and tested but **not
 deployed** — the free tier belongs to the other system and Basic costs ~USD 74/month to replace a
@@ -545,9 +548,14 @@ rather than stopping at "the template compiles".
       reads — so the screen cannot ask for documents the engine does not use
 - [x] Final README with 12 screenshots of the running system, captured by an opt-in Playwright
       spec (`e2e/tests/screenshots.spec.ts`), skipped in CI
-- [x] Backend tests: 326 passing (19 gallery + 17 use case 2 added); MCP servers: 34 (8 added);
+- [x] Backend tests: 351 passing (19 gallery, 17 use case 2, 6 Arabic classification, 19
+      translation); MCP servers: 34 (8 added);
       Playwright: 44 passing (rtl, use case 2 and gallery suites added), plus an opt-in
       screenshot spec that CI skips
+- [x] Arabic documents end to end: the classifier reads Arabic as well as English (with
+      spelling and presentation-form folding), and an Arabic value is shown in English beside
+      the document's own wording — the model translating in Azure, an offline glossary in demo.
+      Verified on the live Azure deployment with a real Arabic licence (DECISIONS #84-85)
 - [ ] Milestone checks + commit/PR
 
 ### Bugs found while building M7
@@ -561,9 +569,46 @@ rather than stopping at "the template compiles".
   Assurance panels. Found in a screenshot, not by a test. The strip now scrolls on its own.
 - **Two docs still named `gpt-4o-mini`** although M6 moved to `gpt-4.1-mini` after the older
   model was refused as deprecated. Corrected in DECISIONS #78 and the glossary.
+- **An Arabic trade licence extracted nothing at all.** The classifier only knew English
+  keywords, so an Arabic document scored zero, was marked unknown, and no schema applied. Found
+  by the user uploading a real licence to the Azure deployment, not by a test. Arabic keywords,
+  spelling folding and NFKC now handle it, and a camel-cased filename is split into words.
+- **Arabic in a PDF text layer matched nothing even after the keywords were added.** The text
+  came back as *presentation forms* — shaped glyph codes that look identical and compare
+  differently. NFKC in the one shared  fixed classification, label matching and the
+  glossary at once. The lesson: two strings that render the same can still be different strings.
 - **Headless browsers do not render PDFs.** The document viewer looked blank in every screenshot
   and in a Chromium test. The product was fine; the capture spec now runs Firefox with its PDF
   viewer enabled, and this is written down so the next person does not chase a phantom bug.
+
+### Review findings (2026-09-23), not yet fixed
+A four-area review; items marked (v) were re-checked by hand. Fix order: 1 then 2 then 3.
+
+1. **Decisions that can look right when they are wrong**
+   - (v) One review decision closes the case: approving any task resolves every open finding
+     (a sanctions match included) and posts. `api/v1/review.py` submit_decision
+   - (v) Deciding does not check who claimed the task, nor that it was escalated to a supervisor
+   - (v) Submit stays clickable while sending (`components/ui/button.tsx` `disabled ?? loading`);
+     a stale reason code is saved with a new decision (`screens/ReviewTask.tsx`)
+   - (v) A failed posting is replayed, never retried (`services/posting.py` reuses the failed row)
+   - (v) A registry outage on the licence lookup raises no finding (`agent/investigator.py`)
+   - (v) Arabic prompt injection is not caught by the local shield (`guardrails/shield.py`)
+   - (v) `parse_date` reads a Hijri date (1446/12/15) as Gregorian — introduced by the M7 date fix
+   - An ungrounded non-critical value can pass in Azure mode (label signal, critic only on critical)
+2. **Wrong data or crashes**
+   - (v) Same-type documents overwrite each other in `_values_by_doc` (two passports, one screened)
+   - (v) Every critical rule failure is labelled DOCUMENT_EXPIRED (`agent/nodes.py` validate_node)
+   - (v) An Arabic filename crashes the document endpoint (Latin-1 Content-Disposition)
+   - Finding status and corrections carried over by code / field name across documents
+   - A case can be started again from any status; `auto` recovery can take over Conductor cases
+   - Personal data in event details and logs; Arabic-Indic digits sent for translation
+3. **Infrastructure and CI**
+   - (v) `compose.prod.yaml` still bind-mounts source and dev ports (lists merge, not replace)
+   - (v) The MCP image builds its `dev` stage everywhere; on AKS document-store mounts an empty dir
+   - (v) CI builds the web `dev` target, so tsc and the production build never run in CI
+   - (v) No startup guard against the default JWT secret outside local demo
+   - Conductor path in the Helm chart cannot start; teardown purge ran before deletion finished
+   - Docs drift: README gpt-4o-mini, cost table, casetypes docstring claims
 
 ## Capability coverage
 - [x] LangGraph: supervisor-worker (Send API, one worker per document)

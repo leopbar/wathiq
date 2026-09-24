@@ -83,7 +83,9 @@ interface ExtractedField {
   id: string; case_id: string; document_id: string | null;
   name: string;                            // snake_case key, e.g. "license_number"
   label_en: string; label_ar: string;
-  value: string | null;                    // what the agent extracted
+  value: string | null;                    // what the agent extracted — the evidence
+  value_translated: string | null;         // English beside an Arabic value (M7), never instead
+  translation_source: string;              // "glossary" | "model" | "" when there is none
   corrected_value: string | null;          // what a reviewer typed
   confidence: number;                      // raw 0..1
   calibrated_confidence: number;           // 0..1 after calibration

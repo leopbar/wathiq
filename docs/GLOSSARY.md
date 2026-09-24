@@ -508,3 +508,14 @@ trusting the letter it wrote.*
 **Failure-mode gallery** — a screen listing the ways a case can go wrong and what Wathiq does about
 each, with a button that stages the failure live. *Like a fire drill: you show the alarm works by
 setting it off, safely.*
+
+**Presentation forms (Arabic)** — the shaped glyph codes a PDF may store instead of plain
+letters. They look identical on screen and match nothing in a search. *Like a word written in
+joined-up handwriting: the same word, but a machine comparing letter by letter sees nothing.*
+
+**NFKC normalisation** — a standard way of folding those lookalike characters back to the plain
+ones before comparing. *Like typing a handwritten note out in block capitals before checking it
+against a list.*
+
+**Reading aid (translation)** — the English shown beside an Arabic value. It is never the stored
+value. *Like subtitles on a film: they help you follow it, but the film is what was recorded.*

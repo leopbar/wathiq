@@ -12,20 +12,35 @@ Pydantic validation of the result stays identical, so only the source of the val
 from __future__ import annotations
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date
 
 # Field values we recognise without any model, by shape.
+# The date formats real UAE documents use, not only the two the synthetic ones do. A licence
+# printing 2024/06/15 was read as no date at all, so its expiry rules never ran — a document
+# that silently loses its dates is worse than one that is refused, because nothing says so.
+#
+# Year-first is unambiguous. Day-first is assumed for the two-then-four shapes, which is the
+# convention in the UAE (and in the synthetic set); an American month-first date would be
+# misread, and that is a judgement recorded here rather than left implicit.
 _DATE_PATTERNS = [
-    (re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b"), "%Y-%m-%d"),
-    (re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b"), "%d/%m/%Y"),
+    (re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b"), "year-first"),
+    (re.compile(r"\b(\d{4})/(\d{1,2})/(\d{1,2})\b"), "year-first"),
+    (re.compile(r"\b(\d{4})\.(\d{1,2})\.(\d{1,2})\b"), "year-first"),
+    (re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b"), "day-first"),
+    (re.compile(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b"), "day-first"),
+    (re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b"), "day-first"),
 ]
 _NORMALISE = re.compile(r"[^\w]+")
 
 
 def _key(text: str) -> str:
-    return _NORMALISE.sub(" ", text.lower()).strip()
+    # NFKC folds Arabic presentation forms (the shaped glyph codes a PDF text layer often
+    # carries) back to the letters the schema's labels are written with. Without it, an Arabic
+    # label in the document never matches the same label in the configuration.
+    return _NORMALISE.sub(" ", unicodedata.normalize("NFKC", text).lower()).strip()
 
 
 @dataclass(slots=True)
@@ -37,18 +52,24 @@ class ExtractedValue:
 
 
 def parse_date(text: str) -> date | None:
-    """Read a date in either of the two formats the synthetic documents use."""
-    for pattern, _fmt in _DATE_PATTERNS:
+    """Read a date written any of the usual ways, or return None rather than guess.
+
+    Separator: hyphen, slash or dot. Order: year-first, or day-first (see the note above).
+    An impossible date (13 as a month, 31 February) is not a date, and None says so.
+    """
+    for pattern, order in _DATE_PATTERNS:
         match = pattern.search(text)
         if not match:
             continue
-        groups = match.groups()
+        first, second, third = (int(part) for part in match.groups())
+        year, month, day = (
+            (first, second, third) if order == "year-first" else (third, second, first)
+        )
         try:
-            if len(groups[0]) == 4:
-                return date(int(groups[0]), int(groups[1]), int(groups[2]))
-            return date(int(groups[2]), int(groups[1]), int(groups[0]))
+            return date(year, month, day)
         except ValueError:
-            return None
+            # A real value in a shape we misread — keep looking rather than accept nonsense.
+            continue
     return None
 
 

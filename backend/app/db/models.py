@@ -198,6 +198,11 @@ class ExtractedField(Base):
     # Normalised [x, y, w, h] in 0..1 so the UI can overlay it on any render size.
     bbox: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
     source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # An English reading of an Arabic value, and who produced it ("glossary" | "model").
+    # Stored beside the value, never over it: the value is the evidence and the translation is
+    # a convenience for a reader who does not read Arabic.
+    value_translated: Mapped[str | None] = mapped_column(Text, nullable=True)
+    translation_source: Mapped[str] = mapped_column(String(16), default="")
     # The signals the confidence was built from: OCR quality, grounding, label match, shape,
     # critic agreement. Stored so the case screen can show WHY a number is what it is.
     signals: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)

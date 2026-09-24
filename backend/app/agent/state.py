@@ -93,6 +93,10 @@ class FieldState(TypedDict):
     label_en: str
     label_ar: str
     value: str | None
+    # A reading aid, never the value: the English of an Arabic value, with where it came from
+    # ("glossary", "model" or "none"). The audit trail and the posting use `value`.
+    value_translated: NotRequired[str | None]
+    translation_source: NotRequired[str]
     # The weighted score built from the signals below.
     confidence: float
     # `confidence` passed through the calibration curve. Equal to it when not yet calibrated.

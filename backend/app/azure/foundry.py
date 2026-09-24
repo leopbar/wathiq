@@ -32,6 +32,7 @@ from typing import Any
 
 from app.agent import schema as extraction_schema
 from app.agent.extractor import ExtractedValue, ExtractorBackend
+from app.agent.translate import Translation, TranslatorBackend
 from app.azure.credentials import describe_credential, require_sdk, token_credential
 from app.core.config import settings
 from app.rag.embedder import Embedder
@@ -353,10 +354,104 @@ class FoundryEmbedder(Embedder):
         return f"azure-{self._deployment}-d{self._dimensions}"
 
 
+_TRANSLATION_SYSTEM = (
+    "You translate single field values taken from UAE banking documents into English. "
+    "Rules, in order: (1) a personal or company name is TRANSLITERATED, never translated, "
+    "because a name is how an entity is looked up; (2) a standard term is given the wording a "
+    "UAE bank uses, for example a legal form or a licensing authority; (3) anything you cannot "
+    "translate confidently is returned as null, never guessed. Return only the JSON object."
+)
+
+_TRANSLATION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["translations"],
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["index", "english"],
+                "properties": {
+                    "index": {"type": "integer"},
+                    "english": {"type": ["string", "null"]},
+                },
+            },
+        }
+    },
+}
+
+
+class FoundryTranslator(TranslatorBackend):
+    """Translate a document's Arabic values with one model call for the whole list.
+
+    One call, not one per field: a licence has nine fields, and nine round trips would cost
+    nine times as much and take nine times as long for the same answer. The values are sent as
+    a numbered list and come back by index, so an answer can never be attached to the wrong
+    field — matching by position alone would do exactly that if the model dropped an item.
+
+    The model may answer `null`. That is a real answer: "I cannot translate this", and the UI
+    then shows the document's own words with nothing beside them.
+    """
+
+    name = "model"
+
+    def __init__(self, client: FoundryClient | None = None) -> None:
+        self._client = client or shared_client()
+        self._deployment = settings.azure_openai_deployment.strip()
+        if not self._deployment:
+            raise ValueError("Azure OpenAI deployment name is not configured")
+
+    def translate(self, values: list[str]) -> list[Translation]:
+        if not values:
+            return []
+        listing = "\n".join(f"{index}. {value}" for index, value in enumerate(values))
+        response = self._client.client().chat.completions.create(
+            model=self._deployment,
+            temperature=settings.azure_openai_temperature,
+            messages=[
+                {"role": "system", "content": _TRANSLATION_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        "Translate each numbered value into English.\n"
+                        "<values>\n" + listing + "\n</values>"
+                    ),
+                },
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "value_translations",
+                    "strict": True,
+                    "schema": _TRANSLATION_SCHEMA,
+                },
+            },
+        )
+        payload = FoundryExtractor._parse(response)
+        by_index: dict[int, str] = {}
+        for item in payload.get("translations", []):
+            if not isinstance(item, dict):
+                continue
+            index = item.get("index")
+            english = item.get("english")
+            if isinstance(index, int) and isinstance(english, str) and english.strip():
+                by_index[index] = english.strip()
+
+        return [
+            Translation(by_index[index], "model")
+            if index in by_index
+            else Translation(None, "none")
+            for index in range(len(values))
+        ]
+
+
 __all__ = [
     "FoundryClient",
     "FoundryEmbedder",
     "FoundryExtractor",
+    "FoundryTranslator",
     "reset_client",
     "shared_client",
 ]
