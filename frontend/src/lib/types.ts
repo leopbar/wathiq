@@ -115,6 +115,10 @@ export interface ExtractedField {
   label_en: string;
   label_ar: string;
   value: string | null; // what the agent extracted
+  /** English shown in place of an Arabic value. The value above stays the evidence. */
+  value_translated: string | null;
+  /** "glossary" | "model" | "" when there is none — the screen says which. */
+  translation_source: string;
   corrected_value: string | null; // what a reviewer typed
   confidence: number; // raw 0..1
   calibrated_confidence: number; // 0..1 after calibration

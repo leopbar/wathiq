@@ -179,6 +179,8 @@ async def _persist(db, case: models.Case, state: dict[str, Any]) -> None:
                 label_en=field_state["label_en"],
                 label_ar=field_state["label_ar"],
                 value=field_state["value"],
+                value_translated=field_state.get("value_translated"),
+                translation_source=str(field_state.get("translation_source", "")),
                 corrected_value=corrected,
                 confidence=raw,
                 # Equal to the raw score until a curve has been fitted, and the UI says so

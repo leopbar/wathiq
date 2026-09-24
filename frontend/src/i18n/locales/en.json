@@ -487,7 +487,12 @@
       },
       "page": "page {{page}}",
       "noSourceRegion": "no source region",
-      "whyConfidence": "Why this confidence"
+      "whyConfidence": "Why this confidence",
+      "translationHint": "Shown in English for reading. The value stored, audited and posted is the document's own wording, shown beneath.",
+      "translatedBy": {
+        "glossary": "Translated (glossary)",
+        "model": "Translated (model)"
+      }
     },
     "process": {
       "writesCoreBanking": "writes to core banking",
@@ -861,7 +866,8 @@
       "valueFor": "Value for {{label}}",
       "undo": "Undo correction to {{label}}",
       "was": "Was",
-      "emptyValue": "empty"
+      "emptyValue": "empty",
+      "inEnglish": "In English:"
     },
     "decision": {
       "group": "Decision",

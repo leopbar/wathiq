@@ -95,6 +95,16 @@ export function CorrectionList({
               ) : null}
             </div>
 
+            {!arabic && field.value_translated && !changed ? (
+              // The box holds the document's own words, because that is what gets saved. The
+              // English sits beneath it, so a reviewer who does not read Arabic still knows
+              // what they are approving.
+              <p className="mt-1 text-caption text-ink-2">
+                {t("reviewTask.corrections.inEnglish")}{" "}
+                <span className="text-ink">{field.value_translated}</span>
+              </p>
+            ) : null}
+
             {changed ? (
               <p className="mt-1 text-caption text-info">
                 {t("reviewTask.corrections.was")}{" "}

@@ -86,6 +86,70 @@ def test_classifier_refuses_to_guess_on_an_unknown_document() -> None:
     assert confidence < 0.5
 
 
+# --- Arabic: the first real Arabic licence put through this system scored zero, because every
+# --- keyword was English and the filename was camel-cased. Both are covered here.
+
+ARABIC_LICENCE = """رخصة تجارية
+دائرة التنمية الاقتصادية
+رقم الرخصة: CN-1042288
+الشكل القانوني: ذ.م.م"""
+
+
+def test_classifier_identifies_an_arabic_trade_licence() -> None:
+    doc_type, confidence, evidence = classify(ARABIC_LICENCE, "scan.jpg")
+    assert doc_type is DocTypeKey.trade_license
+    assert confidence > 0.5
+    assert evidence
+
+
+def test_arabic_spelling_variants_still_match() -> None:
+    """Vowel marks, a stretched letter and a different alef are the same word to a reader."""
+    stretched = ARABIC_LICENCE.replace(
+        "\u0631\u062e\u0635\u0629", "\u0631\u062e\u0640\u0640\u0635\u0629"
+    )
+    marked = stretched.replace("\u062a\u062c\u0627\u0631\u064a\u0629",
+                               "\u062a\u0650\u062c\u0627\u0631\u064a\u0629")
+    doc_type, _, _ = classify(marked, "scan.jpg")
+    assert doc_type is DocTypeKey.trade_license
+
+
+def test_an_arabic_salary_certificate_is_recognised() -> None:
+    text = (
+        "\u0634\u0647\u0627\u062f\u0629 \u0631\u0627\u062a\u0628\n"
+        "\u0627\u0633\u0645 \u0627\u0644\u0645\u0648\u0638\u0641: "
+        "\u0645\u0631\u064a\u0645\n"
+        "\u0627\u0644\u0631\u0627\u062a\u0628 \u0627\u0644\u0623\u0633\u0627"
+        "\u0633\u064a: 18000"
+    )
+    doc_type, _, _ = classify(text, "doc.pdf")
+    assert doc_type is DocTypeKey.salary_certificate
+
+
+def test_a_camel_cased_filename_is_evidence() -> None:
+    """`tradeLicenseFake.jpg` used to score nothing: its words were never separated."""
+    doc_type, _, evidence = classify("licence number CN-1042288", "tradeLicenseFake.jpg")
+    assert doc_type is DocTypeKey.trade_license
+    assert "trade license" in evidence
+
+
+def test_an_english_document_is_unaffected_by_the_arabic_keywords() -> None:
+    text = DemoOcr().read(_licence_pdf(), "application/pdf").text
+    assert classify(text, "licence.pdf")[:2] == classify(text, "licence.pdf")[:2]
+    assert classify(text, "licence.pdf")[0] is DocTypeKey.trade_license
+
+
+def test_arabic_prose_that_is_not_a_known_document_is_still_refused() -> None:
+    """The Arabic keywords must not turn every Arabic page into a trade licence."""
+    text = (
+        "\u0647\u0630\u0647 \u0631\u0633\u0627\u0644\u0629 \u0639\u0627\u062f"
+        "\u064a\u0629 \u0644\u0627 \u062a\u062e\u0635 \u0623\u064a \u0645\u0633"
+        "\u062a\u0646\u062f \u0631\u0633\u0645\u064a"
+    )
+    doc_type, confidence, _ = classify(text, "note.pdf")
+    assert doc_type is DocTypeKey.unknown
+    assert confidence < 0.5
+
+
 # -------------------------------------------------------------------------- extract
 
 
@@ -112,7 +176,21 @@ def test_low_quality_text_scores_lower_confidence() -> None:
 
 @pytest.mark.parametrize(
     ("text", "expected"),
-    [("2027-03-15", date(2027, 3, 15)), ("15/03/2027", date(2027, 3, 15)), ("nope", None)],
+    [
+        ("2027-03-15", date(2027, 3, 15)),
+        ("15/03/2027", date(2027, 3, 15)),
+        # A real UAE licence writes the year first with slashes. This shape was read as no date
+        # at all, so the expiry rules never ran on it.
+        ("2024/06/15", date(2024, 6, 15)),
+        ("2026.06.14", date(2026, 6, 14)),
+        ("15-03-2027", date(2027, 3, 15)),
+        ("1/3/2027", date(2027, 3, 1)),
+        ("Issue date: 2024/06/15 (Gregorian)", date(2024, 6, 15)),
+        ("nope", None),
+        # An impossible date is not a date: 31 February must not become 3 March.
+        ("2027-02-31", None),
+        ("2027/13/01", None),
+    ],
 )
 def test_parse_date(text: str, expected: date | None) -> None:
     assert parse_date(text) == expected

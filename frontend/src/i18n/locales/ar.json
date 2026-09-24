@@ -506,7 +506,12 @@
       },
       "page": "صفحة {{page}}",
       "noSourceRegion": "لا توجد منطقة مصدر",
-      "whyConfidence": "سبب درجة الثقة هذه"
+      "whyConfidence": "سبب درجة الثقة هذه",
+      "translationHint": "معروض بالإنجليزية للقراءة فقط. القيمة المحفوظة والمدققة والمرسلة هي نص المستند نفسه الظاهر بالأسفل.",
+      "translatedBy": {
+        "glossary": "مترجم (مسرد)",
+        "model": "مترجم (نموذج)"
+      }
     },
     "process": {
       "writesCoreBanking": "يكتب في النظام المصرفي الأساسي",
@@ -973,7 +978,8 @@
       "valueFor": "قيمة {{label}}",
       "undo": "التراجع عن تصحيح {{label}}",
       "was": "كانت",
-      "emptyValue": "فارغة"
+      "emptyValue": "فارغة",
+      "inEnglish": "بالإنجليزية:"
     },
     "decision": {
       "group": "القرار",
